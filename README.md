@@ -10,5 +10,5 @@ by Sean Sungil Kim
 </p>
 
 <p align="center">
-  <img width="650" height="800" src="https://github.com/kimx3314/Reinforcement-Learning/blob/master/output.png">
+  <img width="700" height="900" src="https://github.com/kimx3314/Reinforcement-Learning/blob/master/output.png">
 </p>
