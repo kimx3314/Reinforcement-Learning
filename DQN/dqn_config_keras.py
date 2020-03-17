@@ -11,4 +11,4 @@ class Config(object):
         self.MIN_EPSILON = 0.001              # minimum exploration rate
         self.EPSILON_DECAY = 0.9999           # the rate at which the exploration rate decays
         self.MEMORY_CAPACITY = 100000         # maximum experience queue size
-        self.RENDER = True                   # render toggle
+        self.RENDER = True                    # render toggle
