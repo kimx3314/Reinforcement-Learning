@@ -3,8 +3,8 @@
 import numpy as np
 import tensorflow as tf
 import gym
-from dqn_networks_tf import DQNAgent
-from dqn_config_tf import Config
+from dqn_networks import DQNAgent
+from dqn_config import Config
 
 
 # set the config class
