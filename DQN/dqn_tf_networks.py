@@ -19,7 +19,7 @@ class DQNAgent:
         self.x = tf.compat.v1.placeholder(tf.float32, shape = (None, self.state_size), name = 'X')
         self.y = tf.compat.v1.placeholder(tf.int32, shape = (None, self.action_size), name = 'Y')
 
-        # placeholders for actions, rewards, done_flags (used during training)
+        # placeholders for next_states, actions, rewards, done_flags (used during training)
         self.next_states = tf.compat.v1.placeholder(tf.float32, shape = (self.config.BATCH_SIZE, self.state_size), name = 'Next_state')
         self.actions = tf.compat.v1.placeholder(tf.int32, shape = (self.config.BATCH_SIZE, ), name = 'Actions')
         self.rewards = tf.compat.v1.placeholder(tf.float32, shape = (self.config.BATCH_SIZE, ), name = 'Rewards')
@@ -28,10 +28,12 @@ class DQNAgent:
         self.target_model = self.build_target_model()
         self.model = self.build_model()
 
-        # the Bellman equation
         action_one_hot = tf.one_hot(self.actions, self.action_size, 1.0, 0.0, name = 'Action_one_hot')
-        pred = tf.reduce_sum(self.model * action_one_hot, reduction_indices = -1, name = 'q_acted')
+        pred = tf.reduce_sum(self.model * action_one_hot, reduction_indices = -1, name = 'Pred')
+        
+        # the Bellman equation
         y_hat = self.rewards + (1. - self.done_flags) * self.config.GAMMA * tf.reduce_max(self.target_model, axis = -1)
+        
         self.model_loss = tf.reduce_mean(tf.square(pred - tf.stop_gradient(y_hat)), name = 'Loss')
         self.optimizer = tf.train.AdamOptimizer(learning_rate = self.config.LR, name = 'Adam_Opt').minimize(self.model_loss)
 
@@ -39,7 +41,6 @@ class DQNAgent:
         self.sess.run(tf.global_variables_initializer())
 
     def build_target_model(self):
-        
         weights = {'t_w_1' : tf.compat.v1.get_variable('T_W_1', dtype = tf.float32, shape = (self.state_size, 32), initializer = tf.truncated_normal_initializer(stddev = 0.01)),
                    't_w_2' : tf.compat.v1.get_variable('T_W_2', dtype = tf.float32, shape = (32, 32), initializer = tf.truncated_normal_initializer(stddev = 0.01)),
                    't_w_out' : tf.compat.v1.get_variable('T_W_out', dtype = tf.float32, shape = (32, self.action_size), initializer = tf.truncated_normal_initializer(stddev = 0.01))}
@@ -57,7 +58,6 @@ class DQNAgent:
         return out
 
     def build_model(self):
-        
         weights = {'w_1' : tf.compat.v1.get_variable('W_1', dtype = tf.float32, shape = (self.state_size, 32), initializer = tf.truncated_normal_initializer(stddev = 0.01)),
                    'w_2' : tf.compat.v1.get_variable('W_2', dtype = tf.float32, shape = (32, 32), initializer = tf.truncated_normal_initializer(stddev = 0.01)),
                    'w_out' : tf.compat.v1.get_variable('W_out', dtype = tf.float32, shape = (32, self.action_size), initializer = tf.truncated_normal_initializer(stddev = 0.01))}
@@ -87,23 +87,17 @@ class DQNAgent:
         # store in the replay experience queue
         self.memory.append((state, action, reward, next_state, done))
 
-    def bellman(self, cur_reward, next_state):
-        # return the bellman total return (t+1)
-        return cur_reward + (self.config.GAMMA * np.amax(self.sess.run(self.target_model, {self.x : next_state})))
-
     def train(self):
-
         field_names = ['state', 'action', 'reward', 'next_state', 'done']
         batch_data = {}
 
         # randomly sample from the replay experience que
-        # [(array([[-0.02105868,  0.04257037,  0.04981664,  0.0417123 ]]), 0, 1.0, array([[-0.02020727, -0.15322923,  0.05065088,  0.34968738]]), False)]
         replay_batch = random.sample(self.memory, self.config.BATCH_SIZE)
         for i in range(len(field_names)):
             batch_data[field_names[i]] = [data for data in list(zip(*replay_batch))[i]]
         batch_data.update({'done' : [int(bl) for bl in batch_data['done']]})
-        #print(np.array(batch_data['state']).shape)
 
+        # train the NN
         self.sess.run(self.optimizer, feed_dict = {self.x: batch_data['state'],
                                                    self.actions: batch_data['action'],
                                                    self.rewards: batch_data['reward'],
@@ -115,23 +109,21 @@ class DQNAgent:
             self.config.EPSILON *= self.config.EPSILON_DECAY
 
     def update_target_model(self):
-        
         # obtain all the variables in the Q target network
         self.target_vars = tf.compat.v1.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope = 'Target')
         
         # obtain all the variables in the Q primary network
         self.primary_vars = tf.compat.v1.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope = 'Primary')
 
+        # run the update process
         self.sess.run([var_t.assign(var) for var_t, var in zip(self.target_vars, self.primary_vars)])
 
     def load(self):
-
         # load saved model
         self.imported_graph = tf.train.import_meta_graph('model.meta')
         self.imported_graph.restore(self.sess, './model')
 
     def save(self):
-
         # save model weights
         self.saver = tf.train.Saver()
         self.saver.save(self.sess, './model')
