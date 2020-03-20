@@ -3,7 +3,7 @@
 class Config(object):
     def __init__(self):
         # parameters
-        self.BATCH_SIZE = 256
+        self.BATCH_SIZE = 128
         self.EPISODES = 2000
         self.TARGET_UPDATE_STEP = 100         # update the target model every N steps
         self.LR = 0.001                       # learning rate for the NN optimizer
