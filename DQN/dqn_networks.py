@@ -16,14 +16,14 @@ class DQNAgent:
         self.memory = deque(maxlen = self.config.MEMORY_CAPACITY)
 
         # placeholders for inputs x (state size) and outputs y (action size)
-        self.x = tf.compat.v1.placeholder(tf.float32, shape = (None, self.state_size), name = 'X')
+        self.states = tf.compat.v1.placeholder(tf.float32, shape = (None, self.state_size), name = 'State')
+        self.next_states = tf.compat.v1.placeholder(tf.float32, shape = (None, self.state_size), name = 'Next_state')
         self.y = tf.compat.v1.placeholder(tf.int32, shape = (None, self.action_size), name = 'Y')
 
         # placeholders for next_states, actions, rewards, done_flags (used during training)
-        self.next_states = tf.compat.v1.placeholder(tf.float32, shape = (self.config.BATCH_SIZE, self.state_size), name = 'Next_state')
-        self.actions = tf.compat.v1.placeholder(tf.int32, shape = (self.config.BATCH_SIZE, ), name = 'Actions')
-        self.rewards = tf.compat.v1.placeholder(tf.float32, shape = (self.config.BATCH_SIZE, ), name = 'Rewards')
-        self.done_flags = tf.compat.v1.placeholder(tf.float32, shape = (self.config.BATCH_SIZE, ), name = 'Done_flags')
+        self.actions = tf.compat.v1.placeholder(tf.int32, shape = (None, ), name = 'Actions')
+        self.rewards = tf.compat.v1.placeholder(tf.float32, shape = (None, ), name = 'Rewards')
+        self.done_flags = tf.compat.v1.placeholder(tf.float32, shape = (None, ), name = 'Done_flags')
 
         self.target_model = self.build_target_model()
         self.model = self.build_model()
@@ -53,7 +53,7 @@ class DQNAgent:
                   't_b_out' : tf.compat.v1.get_variable('T_b_out', dtype = tf.float32, initializer = tf.constant(0., shape = (self.action_size, ), dtype = tf.float32))}
 
         # two fully-connected hidden layers
-        fc_1 = tf.nn.relu(tf.add(tf.matmul(self.x, weights['t_w_1']), biases['t_b_1']))
+        fc_1 = tf.nn.relu(tf.add(tf.matmul(self.next_states, weights['t_w_1']), biases['t_b_1']))
         fc_2 = tf.nn.relu(tf.add(tf.matmul(fc_1, weights['t_w_2']), biases['t_b_2']))
 
         # output layer, q-values
@@ -70,7 +70,7 @@ class DQNAgent:
                   'b_out' : tf.compat.v1.get_variable('b_out', dtype = tf.float32, initializer = tf.constant(0., shape = (self.action_size, ), dtype = tf.float32))}
 
         # two fully-connected hidden layers
-        fc_1 = tf.nn.relu(tf.add(tf.matmul(self.x, weights['w_1']), biases['b_1']))
+        fc_1 = tf.nn.relu(tf.add(tf.matmul(self.states, weights['w_1']), biases['b_1']))
         fc_2 = tf.nn.relu(tf.add(tf.matmul(fc_1, weights['w_2']), biases['b_2']))
 
         # output layer, q-values
@@ -85,7 +85,7 @@ class DQNAgent:
         
         # return the action with the highest rewards, exploitation
         else:
-            return self.sess.run(tf.argmax(self.model, axis = 1), {self.x : np.reshape(state, [1, self.state_size])})[0]
+            return self.sess.run(tf.argmax(self.model, axis = 1), {self.states : np.reshape(state, [1, self.state_size])})[0]
 
     def remember(self, state, action, reward, next_state, done):
         # store in the replay experience queue
@@ -102,7 +102,7 @@ class DQNAgent:
         batch_data.update({'done' : [int(bl) for bl in batch_data['done']]})
 
         # train the NN
-        self.sess.run(self.optimizer, feed_dict = {self.x: batch_data['state'],
+        self.sess.run(self.optimizer, feed_dict = {self.states: batch_data['state'],
                                                    self.actions: batch_data['action'],
                                                    self.rewards: batch_data['reward'],
                                                    self.next_states: batch_data['next_state'],
