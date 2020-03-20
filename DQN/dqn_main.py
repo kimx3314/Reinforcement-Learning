@@ -14,6 +14,8 @@ if __name__ == "__main__":
     env = gym.make('CartPole-v0')
     state_size = env.observation_space.shape[0]
     action_size = env.action_space.n
+    step = 0
+
     sess = tf.compat.v1.Session()
     dqn = DQNAgent(sess, state_size, action_size, config)
 
@@ -32,6 +34,7 @@ if __name__ == "__main__":
 
             # input the action to the environment, and obtain the following
             next_state, reward, done, _ = env.step(action)
+            step += 1
 
             # if done, reward is -10
             reward = reward if not done else -10
@@ -43,13 +46,16 @@ if __name__ == "__main__":
             # go to the next state
             state = next_state
             score += reward
-            
+
             # if the episode is finished, update the target_model and go to the next episode
             if done:
-                dqn.update_target_model()
                 print("Episode: %i / %i,\tScore: %i,\tExploration Rate: %.4f" % (episode + 1, config.EPISODES, score, config.EPSILON))
                 break
 
             # if there are enough instances in the replay experience queue, fit the NN using past experience
             if len(dqn.memory) > config.BATCH_SIZE:
                 dqn.train()
+
+            # update the target_model every N steps
+            if step % config.TARGET_UPDATE_STEP == 0:
+                dqn.update_target_model()
