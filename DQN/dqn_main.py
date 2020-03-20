@@ -14,7 +14,7 @@ if __name__ == "__main__":
     env = gym.make('CartPole-v0')
     state_size = env.observation_space.shape[0]
     action_size = env.action_space.n
-    step = 0
+    step = 1
 
     sess = tf.compat.v1.Session()
     dqn = DQNAgent(sess, state_size, action_size, config)
