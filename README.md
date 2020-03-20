@@ -6,7 +6,7 @@ by Sean Sungil Kim
 
 
 <p align="center">
-  <b>Deep Q-Network Performance over 50 Episodes Using the CartPole-v0 Environment</b><br>
+  <b>Deep Q-Network Performance in the CartPole-v0 Environment</b><br>
 </p>
 
 <p align="center">
