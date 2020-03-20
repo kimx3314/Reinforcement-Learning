@@ -45,36 +45,36 @@ class DQNAgent:
         self.sess.run(tf.compat.v1.global_variables_initializer())
 
     def build_target_model(self):
-        weights = {'t_w_1' : tf.compat.v1.get_variable('T_W_1', dtype = tf.float32, shape = (self.state_size, 32), initializer = tf.truncated_normal_initializer(stddev = 0.01)),
-                   't_w_2' : tf.compat.v1.get_variable('T_W_2', dtype = tf.float32, shape = (32, 32), initializer = tf.truncated_normal_initializer(stddev = 0.01)),
-                   't_w_out' : tf.compat.v1.get_variable('T_W_out', dtype = tf.float32, shape = (32, self.action_size), initializer = tf.truncated_normal_initializer(stddev = 0.01))}
-        biases = {'t_b_1' : tf.compat.v1.get_variable('T_b_1', dtype = tf.float32, initializer = tf.constant(0., shape = (32, ), dtype = tf.float32)),
-                  't_b_2' : tf.compat.v1.get_variable('T_b_2', dtype = tf.float32, initializer = tf.constant(0., shape = (32, ), dtype = tf.float32)),
-                  't_b_out' : tf.compat.v1.get_variable('T_b_out', dtype = tf.float32, initializer = tf.constant(0., shape = (self.action_size, ), dtype = tf.float32))}
+        weights = {'t_w1' : tf.compat.v1.get_variable('T_w1', dtype = tf.float32, shape = (self.state_size, 32), initializer = tf.truncated_normal_initializer(stddev = 0.01)),
+                   't_w2' : tf.compat.v1.get_variable('T_w2', dtype = tf.float32, shape = (32, 32), initializer = tf.truncated_normal_initializer(stddev = 0.01)),
+                   't_wOut' : tf.compat.v1.get_variable('T_wOut', dtype = tf.float32, shape = (32, self.action_size), initializer = tf.truncated_normal_initializer(stddev = 0.01))}
+        biases = {'t_b1' : tf.compat.v1.get_variable('T_b1', dtype = tf.float32, initializer = tf.constant(0., shape = (32, ), dtype = tf.float32)),
+                  't_b2' : tf.compat.v1.get_variable('T_b2', dtype = tf.float32, initializer = tf.constant(0., shape = (32, ), dtype = tf.float32)),
+                  't_bOut' : tf.compat.v1.get_variable('T_bOut', dtype = tf.float32, initializer = tf.constant(0., shape = (self.action_size, ), dtype = tf.float32))}
 
         # two fully-connected hidden layers
-        fc_1 = tf.nn.relu(tf.add(tf.matmul(self.next_states, weights['t_w_1']), biases['t_b_1']))
-        fc_2 = tf.nn.relu(tf.add(tf.matmul(fc_1, weights['t_w_2']), biases['t_b_2']))
+        fc_1 = tf.nn.relu(tf.add(tf.matmul(self.next_states, weights['t_w1']), biases['t_b1']))
+        fc_2 = tf.nn.relu(tf.add(tf.matmul(fc_1, weights['t_w2']), biases['t_b2']))
 
         # output layer, q-values
-        out = tf.add(tf.matmul(fc_2, weights['t_w_out']), biases['t_b_out'], name = 'Target')
+        out = tf.add(tf.matmul(fc_2, weights['t_wOut']), biases['t_bOut'], name = 'Target')
 
         return out
 
     def build_model(self):
-        weights = {'w_1' : tf.compat.v1.get_variable('W_1', dtype = tf.float32, shape = (self.state_size, 32), initializer = tf.truncated_normal_initializer(stddev = 0.01)),
-                   'w_2' : tf.compat.v1.get_variable('W_2', dtype = tf.float32, shape = (32, 32), initializer = tf.truncated_normal_initializer(stddev = 0.01)),
-                   'w_out' : tf.compat.v1.get_variable('W_out', dtype = tf.float32, shape = (32, self.action_size), initializer = tf.truncated_normal_initializer(stddev = 0.01))}
-        biases = {'b_1' : tf.compat.v1.get_variable('b_1', dtype = tf.float32, initializer = tf.constant(0., shape = (32, ), dtype = tf.float32)),
-                  'b_2' : tf.compat.v1.get_variable('b_2', dtype = tf.float32, initializer = tf.constant(0., shape = (32, ), dtype = tf.float32)),
-                  'b_out' : tf.compat.v1.get_variable('b_out', dtype = tf.float32, initializer = tf.constant(0., shape = (self.action_size, ), dtype = tf.float32))}
+        weights = {'w1' : tf.compat.v1.get_variable('w1', dtype = tf.float32, shape = (self.state_size, 32), initializer = tf.truncated_normal_initializer(stddev = 0.01)),
+                   'w2' : tf.compat.v1.get_variable('w2', dtype = tf.float32, shape = (32, 32), initializer = tf.truncated_normal_initializer(stddev = 0.01)),
+                   'wOut' : tf.compat.v1.get_variable('wOut', dtype = tf.float32, shape = (32, self.action_size), initializer = tf.truncated_normal_initializer(stddev = 0.01))}
+        biases = {'b1' : tf.compat.v1.get_variable('b1', dtype = tf.float32, initializer = tf.constant(0., shape = (32, ), dtype = tf.float32)),
+                  'b2' : tf.compat.v1.get_variable('b2', dtype = tf.float32, initializer = tf.constant(0., shape = (32, ), dtype = tf.float32)),
+                  'bOut' : tf.compat.v1.get_variable('bOut', dtype = tf.float32, initializer = tf.constant(0., shape = (self.action_size, ), dtype = tf.float32))}
 
         # two fully-connected hidden layers
-        fc_1 = tf.nn.relu(tf.add(tf.matmul(self.states, weights['w_1']), biases['b_1']))
-        fc_2 = tf.nn.relu(tf.add(tf.matmul(fc_1, weights['w_2']), biases['b_2']))
+        fc_1 = tf.nn.relu(tf.add(tf.matmul(self.states, weights['w1']), biases['b1']))
+        fc_2 = tf.nn.relu(tf.add(tf.matmul(fc_1, weights['w2']), biases['b2']))
 
         # output layer, q-values
-        out = tf.add(tf.matmul(fc_2, weights['w_out']), biases['b_out'], name = 'Primary')
+        out = tf.add(tf.matmul(fc_2, weights['wOut']), biases['bOut'], name = 'Primary')
 
         return out
 
