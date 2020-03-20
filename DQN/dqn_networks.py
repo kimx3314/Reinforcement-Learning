@@ -20,7 +20,7 @@ class DQNAgent:
         self.next_states = tf.compat.v1.placeholder(tf.float32, shape = (None, self.state_size), name = 'Next_state')
         self.y = tf.compat.v1.placeholder(tf.int32, shape = (None, self.action_size), name = 'Y')
 
-        # placeholders for next_states, actions, rewards, done_flags (used during training)
+        # placeholders for actions, rewards, done_flags (used during training)
         self.actions = tf.compat.v1.placeholder(tf.int32, shape = (None, ), name = 'Actions')
         self.rewards = tf.compat.v1.placeholder(tf.float32, shape = (None, ), name = 'Rewards')
         self.done_flags = tf.compat.v1.placeholder(tf.float32, shape = (None, ), name = 'Done_flags')
