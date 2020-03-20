@@ -28,7 +28,7 @@ if __name__ == "__main__":
                 env.render()
             
             # t
-            # retrieve the action from the ddpg model
+            # retrieve the action from the dqn model
             action = dqn.act(state)
 
             # input the action to the environment, and obtain the following
