@@ -28,17 +28,21 @@ class DQNAgent:
         self.target_model = self.build_target_model()
         self.model = self.build_model()
 
+        # one-hot encoding
         action_one_hot = tf.one_hot(self.actions, self.action_size, 1.0, 0.0, name = 'Action_one_hot')
-        pred = tf.reduce_sum(self.model * action_one_hot, reduction_indices = -1, name = 'Pred')
+
+        # q-values for the activated actions
+        pred = tf.reduce_sum(self.model * action_one_hot, axis = 1, name = 'Pred')
         
         # the Bellman equation
-        y_hat = self.rewards + (1. - self.done_flags) * self.config.GAMMA * tf.reduce_max(self.target_model, axis = -1)
+        y_hat = self.rewards + (1. - self.done_flags) * self.config.GAMMA * tf.reduce_max(self.target_model, axis = 1)
         
+        # MSE between the primary (activated actions) and target (highest) q-vlaues
         self.model_loss = tf.reduce_mean(tf.square(pred - tf.stop_gradient(y_hat)), name = 'Loss')
-        self.optimizer = tf.train.AdamOptimizer(learning_rate = self.config.LR, name = 'Adam_Opt').minimize(self.model_loss)
+        self.optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate = self.config.LR, name = 'Adam_Opt').minimize(self.model_loss)
 
         # initialize variables
-        self.sess.run(tf.global_variables_initializer())
+        self.sess.run(tf.compat.v1.global_variables_initializer())
 
     def build_target_model(self):
         weights = {'t_w_1' : tf.compat.v1.get_variable('T_W_1', dtype = tf.float32, shape = (self.state_size, 32), initializer = tf.truncated_normal_initializer(stddev = 0.01)),
@@ -52,7 +56,7 @@ class DQNAgent:
         fc_1 = tf.nn.relu(tf.add(tf.matmul(self.x, weights['t_w_1']), biases['t_b_1']))
         fc_2 = tf.nn.relu(tf.add(tf.matmul(fc_1, weights['t_w_2']), biases['t_b_2']))
 
-        # output layer
+        # output layer, q-values
         out = tf.add(tf.matmul(fc_2, weights['t_w_out']), biases['t_b_out'], name = 'Target')
 
         return out
@@ -69,7 +73,7 @@ class DQNAgent:
         fc_1 = tf.nn.relu(tf.add(tf.matmul(self.x, weights['w_1']), biases['b_1']))
         fc_2 = tf.nn.relu(tf.add(tf.matmul(fc_1, weights['w_2']), biases['b_2']))
 
-        # output layer
+        # output layer, q-values
         out = tf.add(tf.matmul(fc_2, weights['w_out']), biases['b_out'], name = 'Primary')
 
         return out
@@ -81,7 +85,7 @@ class DQNAgent:
         
         # return the action with the highest rewards, exploitation
         else:
-            return self.sess.run(tf.argmax(self.model, 1), {self.x : np.reshape(state, [1, self.state_size])})[0]
+            return self.sess.run(tf.argmax(self.model, axis = 1), {self.x : np.reshape(state, [1, self.state_size])})[0]
 
     def remember(self, state, action, reward, next_state, done):
         # store in the replay experience queue
@@ -90,7 +94,7 @@ class DQNAgent:
     def train(self):
         field_names = ['state', 'action', 'reward', 'next_state', 'done']
         batch_data = {}
-
+        
         # randomly sample from the replay experience que
         replay_batch = random.sample(self.memory, self.config.BATCH_SIZE)
         for i in range(len(field_names)):
@@ -110,10 +114,10 @@ class DQNAgent:
 
     def update_target_model(self):
         # obtain all the variables in the Q target network
-        self.target_vars = tf.compat.v1.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope = 'Target')
+        self.target_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope = 'Target')
         
         # obtain all the variables in the Q primary network
-        self.primary_vars = tf.compat.v1.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope = 'Primary')
+        self.primary_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope = 'Primary')
 
         # run the update process
         self.sess.run([var_t.assign(var) for var_t, var in zip(self.target_vars, self.primary_vars)])
