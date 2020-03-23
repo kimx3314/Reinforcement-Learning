@@ -2,8 +2,8 @@
 
 import tensorflow as tf
 import gym
-from dqn_networks import DQNAgent
-from dqn_config import Config
+from dqn_tf_networks import DQNAgent
+from dqn_tf_config import Config
 
 
 # set the config class
