@@ -37,6 +37,9 @@ if __name__ == "__main__":
             next_state, reward, done, _ = env.step(action)
             step += 1
             
+            # if the episode is finished, reward is -10
+            reward = -10 if done else reward
+            
             # store in the replay experience queue and go to the next state
             dqn.remember(state, action, reward, next_state, done)
             
