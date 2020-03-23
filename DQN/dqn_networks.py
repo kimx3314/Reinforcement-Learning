@@ -38,8 +38,8 @@ class DQNAgent:
         y_hat = self.rewards + (1. - self.done_flags) * self.config.GAMMA * tf.reduce_max(self.target_model, axis = 1)
         
         # MSE between the primary (activated actions) and target (highest) q-vlaues
-        self.model_loss = tf.reduce_mean(tf.square(pred - tf.stop_gradient(y_hat)), name = 'Loss')
-        self.optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate = self.config.LR, name = 'Adam_Opt').minimize(self.model_loss)
+        model_loss = tf.reduce_mean(tf.square(pred - tf.stop_gradient(y_hat)), name = 'Loss')
+        self.optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate = self.config.LR, name = 'Adam_Opt').minimize(model_loss)
 
         # initialize variables
         self.sess.run(tf.compat.v1.global_variables_initializer())
