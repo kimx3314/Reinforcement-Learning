@@ -11,6 +11,8 @@ config = Config()
 
 if __name__ == "__main__":
     env = gym.make('CartPole-v0')
+    
+    # define the state and the action space size
     state_size = env.observation_space.shape[0]
     action_size = env.action_space.n
     step = 1
@@ -46,7 +48,7 @@ if __name__ == "__main__":
             state = next_state
             score += reward
 
-            # if the episode is finished, update the target_model and go to the next episode
+            # if the episode is finished, go to the next episode
             if done:
                 print("Episode: %i / %i,\tScore: %i,\tExploration Rate: %.4f" % (episode + 1, config.EPISODES, score, config.EPSILON))
                 break
