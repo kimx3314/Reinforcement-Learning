@@ -143,9 +143,9 @@ class DDPG(object):
         self.actor_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope = 'Actor')
         self.critic_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope = 'Critic')
 
-        # run the update process
-        self.sess.run([var_t.assign(var) for var_t, var in zip(self.actor_target_vars, self.actor_vars)])
-        self.sess.run([var_t.assign(var) for var_t, var in zip(self.critic_target_vars, self.critic_vars)])
+        # run the soft-update process
+        self.sess.run([var_t.assign(self.config.TAU * var + (1.0 - self.config.TAU) * var_t) for var_t, var in zip(self.actor_target_vars, self.actor_vars)])
+        self.sess.run([var_t.assign(self.config.TAU * var + (1.0 - self.config.TAU) * var_t) for var_t, var in zip(self.critic_target_vars, self.critic_vars)])
 
     def load(self):
         # load saved model
