@@ -36,9 +36,6 @@ if __name__ == "__main__":
             # input the action to the environment, and obtain the following
             next_state, reward, done, _ = env.step(action)
             step += 1
-
-            # if done, reward is -10
-            reward = reward if not done else -10
             
             # store in the replay experience queue and go to the next state
             dqn.remember(state, action, reward, next_state, done)
