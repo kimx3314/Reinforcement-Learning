@@ -120,10 +120,6 @@ class DDPG(object):
         for i in range(len(field_names)):
             batch_data[field_names[i]] = [data for data in list(zip(*replay_batch))[i]]
 
-
-        #print(self.sess.run(self.q, {self.states: batch_data['state']}))
-        #print(self.sess.run(self.actor_loss, {self.states: batch_data['state']}))
-        #exit()
         self.sess.run(self.actor_optimizer, {self.states: batch_data['state']})
         self.sess.run(self.critic_optimizer, {self.states: batch_data['state'],
                                               self.actor: batch_data['action'],
