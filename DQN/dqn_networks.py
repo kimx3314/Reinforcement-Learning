@@ -39,7 +39,7 @@ class DQNAgent:
         
         # MSE between the primary (activated actions) and target (highest) q-vlaues
         model_loss = tf.reduce_mean(tf.square(pred - tf.stop_gradient(y_hat)), name = 'Loss')
-        self.optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate = self.config.LR, name = 'Adam_Opt').minimize(model_loss)
+        self.optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate = self.config.LR, name = 'Adam_opt').minimize(model_loss)
 
         # initialize variables
         self.sess.run(tf.compat.v1.global_variables_initializer())
