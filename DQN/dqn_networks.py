@@ -15,16 +15,16 @@ class DQNAgent:
         self.action_size = action_size
         self.memory = deque(maxlen = self.config.MEMORY_CAPACITY)
 
-        # placeholders for inputs x (state size) and outputs y (action size)
+        # placeholders for inputs x (state size)
         self.states = tf.compat.v1.placeholder(tf.float32, shape = (None, self.state_size), name = 'State')
         self.next_states = tf.compat.v1.placeholder(tf.float32, shape = (None, self.state_size), name = 'Next_state')
-        self.q = tf.compat.v1.placeholder(tf.int32, shape = (None, self.action_size), name = 'Q')
 
         # placeholders for actions, rewards, done_flags (used during training)
         self.actions = tf.compat.v1.placeholder(tf.int32, shape = (None, ), name = 'Actions')
         self.rewards = tf.compat.v1.placeholder(tf.float32, shape = (None, ), name = 'Rewards')
         self.done_flags = tf.compat.v1.placeholder(tf.float32, shape = (None, ), name = 'Done_flags')
 
+        # q-values
         self.target_model = self.build_target_model()
         self.model = self.build_model()
 
