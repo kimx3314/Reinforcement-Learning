@@ -119,8 +119,8 @@ class DQNAgent:
         # obtain all the variables in the Q primary network
         self.primary_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope = 'Primary')
 
-        # run the update process
-        self.sess.run([var_t.assign(var) for var_t, var in zip(self.target_vars, self.primary_vars)])
+        # run the soft-update process
+        self.sess.run([var_t.assign(self.config.TAU * var + (1.0 - self.config.TAU) * var_t) for var_t, var in zip(self.target_vars, self.primary_vars)])
 
     def load(self):
         # load saved model
