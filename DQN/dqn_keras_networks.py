@@ -56,6 +56,7 @@ class DQNAgent:
 
     def bellman(self, batch_data, q_values):
         # return the bellman total return
+        # Q(s,a) = r + γ(max(Q(s’,a’))
         q_values = np.array(batch_data['reward']) - np.array(1 - np.array(batch_data['done']) * self.config.GAMMA * np.amax(self.target_model.predict(np.array(batch_data['next_state'])), axis = 1))
 
         return q_values
