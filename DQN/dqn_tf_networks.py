@@ -35,6 +35,7 @@ class DQNAgent:
         pred = tf.reduce_sum(self.model * action_one_hot, axis = 1, name = 'Pred')
         
         # the Bellman equation
+        # Q(s,a) = r + γ(max(Q(s’,a’))
         y_hat = self.rewards + (1. - self.done_flags) * self.config.GAMMA * tf.reduce_max(self.target_model, axis = 1)
         
         # MSE between the primary (activated actions) and target (highest) q-vlaues
