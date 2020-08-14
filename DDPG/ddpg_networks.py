@@ -57,6 +57,7 @@ class DDPG(object):
             q_target = self.build_critic('Critic_target', self.next_states, actor_target, reuse = True, trainable = False, custom_getter = ema_getter)
 
             # the Bellman equation
+            # Q(s,a) = r + γ(max(Q(s’,a’))
             y_hat = self.rewards + self.config.GAMMA * q_target
 
             # MSE loss
