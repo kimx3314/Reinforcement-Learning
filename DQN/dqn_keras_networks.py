@@ -1,24 +1,23 @@
 # sean sungil kim
 
-import numpy as np
-from tensorflow import one_hot
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense
-from tensorflow.keras.optimizers import Adam
-import keras.backend as K
-from collections import deque
 import random
+import gym
+import numpy as np
+from collections import deque
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.optimizers import Adam
+import keras.backend as K
 
 
 class DQNAgent:
-    def __init__(self, state_size, action_size, config):
+    def __init__(self, config, state_size, action_size):
         # initialize the parameters and the model
         self.config = config
         self.state_size = state_size
         self.action_size = action_size
-        self.memory = deque(maxlen = self.config.MEMORY_CAPACITY)
+        self.memory = deque(maxlen=self.config.MEMORY_SIZE)
 
-        self.target_model = self.build_model()
         self.model = self.build_model()
 
     def build_model(self):
@@ -31,70 +30,58 @@ class DQNAgent:
 
         # output shape should be the action size
         model.add(Dense(self.action_size, activation = 'linear'))
-        model.compile(loss = self.custom_loss, optimizer = Adam(lr = self.config.LR))
+        model.compile(loss = self.custom_loss, optimizer = Adam(lr = self.config.LEARNING_RATE))
 
         return model
 
     def custom_loss(self, yTrue, yPred):
+        # MSE loss
         return K.mean(K.square(yTrue - np.amax(yPred)))
 
     def act(self, state):
-        #reshape according to the input shape
-        state = state.reshape(-1, self.state_size)
-
         # if the exploration rate is below or equal to the random sample from a uniform distribution over [0, 1), return a random action
-        if np.random.rand() <= self.config.EPSILON:
+        if np.random.rand() < self.config.EXPLORATION_RATE:
             return random.randrange(self.action_size)
-        
+
         # return the action with the highest rewards, exploitation
         else:
-            return np.argmax(self.model.predict(state))
+            q_values = self.model.predict(state)
+            return np.argmax(q_values[0])
 
     def remember(self, state, action, reward, next_state, done):
         # store in the replay experience queue
         self.memory.append((state, action, reward, next_state, done))
 
-    def bellman(self, batch_data, q_values):
+    def bellman(self, reward, next_state):
         # return the bellman total return
         # Q(s,a) = r + γ(max(Q(s’,a’))
-        q_values = np.array(batch_data['reward']) - np.array(1 - np.array(batch_data['done']) * self.config.GAMMA * np.amax(self.target_model.predict(np.array(batch_data['next_state'])), axis = 1))
+        #q_values = reward + (self.config.GAMMA * np.amax(self.target_model.predict(next_state)[0]))
+        q_values = reward + (self.config.GAMMA * np.amax(self.model.predict(next_state)[0]))
 
         return q_values
 
     def train(self):
-        field_names = ['state', 'action', 'reward', 'next_state', 'done']
-        batch_data = {}
+        # if there are not enough data in the replay buffer, skip the training
+        if len(self.memory) < self.config.BATCH_SIZE:
+            return
 
         # randomly sample from the replay experience que
-        replay_batch = random.sample(self.memory, self.config.BATCH_SIZE)
-        for i in range(len(field_names)):
-            batch_data[field_names[i]] = [data for data in list(zip(*replay_batch))[i]]
-        batch_data.update({'done' : [int(bl) for bl in batch_data['done']]})
+        batch = random.sample(self.memory, self.config.BATCH_SIZE)
 
-        # calculate the q-values in the current state and update the total return
-        q_values = self.model.predict(np.array(batch_data['state']))
-        q_values = self.bellman(batch_data, q_values)
+        # bellman equation for the q values
+        for state, action, reward, next_state, done in batch:
+            q_update = reward
+            
+            # bellman equation
+            if not done:
+                q_update = self.bellman(reward, next_state)
 
-        # fit the model using the replay experience with updated q_values
-        self.model.fit(np.array(batch_data['state']), q_values, epochs = 10, verbose = 0)
-        #history = self.model.fit(state, q_values, epochs = 1, verbose = 0)
-        #loss = history.history['loss'][0]
-        #self.model_loss.append(loss)
+            q_values = self.model.predict(state)
+            q_values[0][action] = q_update
+
+            # train the model
+            self.model.fit(state, q_values, verbose=0)
 
         # if the exploration rate is greater than the set minimum, apply the decay rate
-        if self.config.EPSILON > self.config.MIN_EPSILON:
-            self.config.EPSILON *= self.config.EPSILON_DECAY
-
-        #return loss
-
-    def update_target_model(self):
-        # update weights of the target_model (with weights of the primary model)
-        self.target_model.set_weights(self.model.get_weights())
-
-    def load(self, name):
-        # load saved model
-        self.model.load_weights(name)
-
-    def save(self, name):
-        # save model weights
-        self.model.save_weights(name)
+        if self.config.EXPLORATION_RATE > self.config.EXPLORATION_MIN:
+            self.config.EXPLORATION_RATE *= self.config.EXPLORATION_DECAY
