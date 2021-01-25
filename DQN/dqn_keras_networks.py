@@ -16,7 +16,7 @@ class DQNAgent:
         self.config = config
         self.state_size = state_size
         self.action_size = action_size
-        self.memory = deque(maxlen=self.config.MEMORY_SIZE)
+        self.memory = deque(maxlen=self.config.MEMORY_CAPACITY)
 
         self.model = self.build_model()
 
@@ -40,7 +40,11 @@ class DQNAgent:
 
     def act(self, state):
         # if the exploration rate is below or equal to the random sample from a uniform distribution over [0, 1), return a random action
-        if np.random.rand() < self.config.EXPLORATION_RATE:
+        if np.random.rand() < self.config.EPSILON:
+            # if the exploration rate is greater than the set minimum, apply the decay rate
+            if self.config.EPSILON > self.config.EPSILON_MIN:
+                self.config.EPSILON *= self.config.EPSILON_DECAY
+
             return random.randrange(self.action_size)
 
         # return the action with the highest rewards, exploitation
@@ -51,6 +55,9 @@ class DQNAgent:
     def remember(self, state, action, reward, next_state, done):
         # store in the replay experience queue
         self.memory.append((state, action, reward, next_state, done))
+
+        # add 1 to the counter
+        self.config.COUNTER += 1
 
     def bellman(self, reward, next_state):
         # return the bellman total return
@@ -82,6 +89,3 @@ class DQNAgent:
             # train the model
             self.model.fit(state, q_values, verbose=0)
 
-        # if the exploration rate is greater than the set minimum, apply the decay rate
-        if self.config.EXPLORATION_RATE > self.config.EXPLORATION_MIN:
-            self.config.EXPLORATION_RATE *= self.config.EXPLORATION_DECAY

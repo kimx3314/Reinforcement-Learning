@@ -15,7 +15,7 @@ def cartpole():
     action_size = env.action_space.n
     dqn = DQNAgent(config, state_size, action_size)
     
-    while True:
+    for episode in range(config.EPISODES):
         total_return = 0
 
         # for each episode, reset the environment
@@ -24,7 +24,8 @@ def cartpole():
         
         while True:
             # rendering the environment
-            env.render()
+            if config.RENDER:
+                env.render()
             
             # t
             # retrieve the action from the dqn model
@@ -45,13 +46,15 @@ def cartpole():
             # go to the next state
             state = next_state
 
+            # DQN agent training
+            if config.COUNTER > config.MEMORY_CAPACITY:
+                dqn.train()
+
             # if the episode is finished, go to the next episode
             if done:
-                print("Score: " + str(total_return) + ", Exploration Rate: " + str(round(config.EXPLORATION_RATE, 3)))
+                print("Episode: %i / %i,\tReturn: %i,\tCounter: %i,\t\tExploration Rate: %.4f" % (episode, config.EPISODES, total_return, config.COUNTER, config.EPSILON))
                 break
 
-            # DQN agent training
-            dqn.train()
 
 if __name__ == "__main__":
     cartpole()

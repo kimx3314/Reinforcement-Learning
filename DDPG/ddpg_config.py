@@ -14,4 +14,4 @@ class Config(object):
         self.STAND_DEV = 2.0                  # standard deviation, when adding noise to the action output
         self.COUNTER = 0                      # replay buffer counter
         self.MEMORY_CAPACITY = 8000           # maximum experience queue size
-        self.RENDER = False                   # render toggle
+        self.RENDER = True                    # render toggle
