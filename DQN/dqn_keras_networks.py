@@ -94,3 +94,12 @@ class DQNAgent:
         # update weights of the target_model (with weights of the primary model)
         #print(self.model.get_weights())
         self.target_model.set_weights(self.model.get_weights())
+
+    def load(self, name):
+        # load saved model
+        self.model.load_weights(name)
+
+    def save(self, name):
+        # save model weights
+        self.model.save_weights(name)
+        
