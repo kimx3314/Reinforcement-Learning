@@ -15,6 +15,7 @@ def cartpole():
     action_size = env.action_space.n
     dqn = DQNAgent(config, state_size, action_size)
     
+    step = 0
     for episode in range(config.EPISODES):
         total_return = 0
 
@@ -45,10 +46,15 @@ def cartpole():
             # t + 1
             # go to the next state
             state = next_state
+            step += 1
 
             # DQN agent training
             if config.COUNTER > config.MEMORY_CAPACITY:
                 dqn.train()
+
+                # update the target_model every N steps
+                if step % config.TARGET_UPDATE_STEP == 0:
+                    dqn.soft_update()
 
             # if the episode is finished, go to the next episode
             if done:

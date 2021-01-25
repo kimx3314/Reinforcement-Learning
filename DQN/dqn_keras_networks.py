@@ -19,6 +19,7 @@ class DQNAgent:
         self.memory = deque(maxlen=self.config.MEMORY_CAPACITY)
 
         self.model = self.build_model()
+        self.target_model = self.build_model()
 
     def build_model(self):
         # building the NN model
@@ -62,8 +63,8 @@ class DQNAgent:
     def bellman(self, reward, next_state):
         # return the bellman total return
         # Q(s,a) = r + γ(max(Q(s’,a’))
-        #q_values = reward + (self.config.GAMMA * np.amax(self.target_model.predict(next_state)[0]))
-        q_values = reward + (self.config.GAMMA * np.amax(self.model.predict(next_state)[0]))
+        q_values = reward + (self.config.GAMMA * np.amax(self.target_model.predict(next_state)[0]))
+        #q_values = reward + (self.config.GAMMA * np.amax(self.model.predict(next_state)[0]))
 
         return q_values
 
@@ -89,3 +90,7 @@ class DQNAgent:
             # train the model
             self.model.fit(state, q_values, verbose=0)
 
+    def soft_update(self):
+        # update weights of the target_model (with weights of the primary model)
+        #print(self.model.get_weights())
+        self.target_model.set_weights(self.model.get_weights())
