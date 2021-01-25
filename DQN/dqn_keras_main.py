@@ -5,6 +5,7 @@ import numpy as np
 from dqn_keras_networks import DQNAgent
 from dqn_keras_config import Config
 
+
 # set the config class
 config = Config()
 
