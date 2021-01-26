@@ -4,6 +4,7 @@ import random
 import gym
 import numpy as np
 from collections import deque
+import tensorflow as tf
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.optimizers import Adam
@@ -11,33 +12,46 @@ import keras.backend as K
 
 
 class DQNAgent:
-    def __init__(self, config, state_size, action_size):
+    def __init__(self, sess, config, state_size, action_size):
         # initialize the parameters and the model
         self.config = config
+        self.sess = sess
+        self.memory = deque(maxlen=self.config.MEMORY_CAPACITY)
         self.state_size = state_size
         self.action_size = action_size
-        self.memory = deque(maxlen=self.config.MEMORY_CAPACITY)
 
-        self.model = self.build_model()
-        self.target_model = self.build_model()
+        # placeholders for inputs
+        self.states= tf.compat.v1.placeholder(tf.float32, (None, state_size), 'States')
+        self.next_states = tf.compat.v1.placeholder(tf.float32, (None, state_size), 'Next_States')
+        self.rewards = tf.compat.v1.placeholder(tf.float32, (None, 1), 'Rewards')
+        self.actions = tf.compat.v1.placeholder(tf.int32, (None, 1), 'Actions')
+        self.done = tf.compat.v1.placeholder(tf.int32, (None, 1), 'Done')
 
-    def build_model(self):
-        # building the NN model
-        model = Sequential()
+        with tf.compat.v1.variable_scope('DQN'):
+            # q_values from the primary and the target model
+            self.q = self.build_model(self.states, scope='Primary')
+            self.q_target = self.build_model(self.next_states, scope='Target', trainable=False)
 
-        # input shape should be the state size
-        model.add(Dense(32, input_dim = self.state_size, activation = 'relu'))
-        model.add(Dense(32, activation = 'relu'))
+        # the Bellman equation
+        # Q(s,a) = r + γ(max(Q(s’,a’))
+        q_target_bellman = self.rewards + (1. - self.done) * self.config.GAMMA * tf.reduce_max(self.q_target, axis = 1)
 
-        # output shape should be the action size
-        model.add(Dense(self.action_size, activation = 'linear'))
-        model.compile(loss = self.custom_loss, optimizer = Adam(lr = self.config.LEARNING_RATE))
+        self.model_loss = tf.compat.v1.losses.mean_squared_error(labels=q_target_bellman, predictions=self.q, scope='Model_loss')
+        self.model_optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=self.config.LEARNING_RATE, name = 'Model_Adam_opt').minimize(self.model_loss)
 
-        return model
+        # initialize variables
+        self.sess.run(tf.compat.v1.global_variables_initializer())
 
-    def custom_loss(self, yTrue, yPred):
-        # MSE loss
-        return K.mean(K.square(yTrue - np.amax(yPred)))
+    def build_model(self, states, scope, trainable=True):
+        with tf.compat.v1.variable_scope(scope):
+            # fully connected layers
+            fc_1 = tf.compat.v1.layers.dense(states, 32, activation=tf.nn.relu, name='fc_1', trainable=trainable)
+            fc_2 = tf.compat.v1.layers.dense(fc_1, 32, activation=tf.nn.relu, name='fc_1', trainable=trainable)
+
+            # output layer, softmax activation puts the out in the range of (0, 1)
+            out = tf.compat.v1.layers.dense(fc_2, self.action_size, activation=tf.nn.softmax, name='out', trainable=trainable)
+            
+            return out
 
     def act(self, state):
         # if the exploration rate is below or equal to the random sample from a uniform distribution over [0, 1), return a random action
@@ -50,8 +64,7 @@ class DQNAgent:
 
         # return the action with the highest rewards, exploitation
         else:
-            q_values = self.model.predict(state)
-            return np.argmax(q_values[0])
+            return np.argmax(self.sess.run(self.q, {self.states: state})[0])
 
     def remember(self, state, action, reward, next_state, done):
         # store in the replay experience queue
@@ -60,14 +73,6 @@ class DQNAgent:
         # add 1 to the counter
         self.config.COUNTER += 1
 
-    def bellman(self, reward, next_state):
-        # return the bellman total return
-        # Q(s,a) = r + γ(max(Q(s’,a’))
-        q_values = reward + (self.config.GAMMA * np.amax(self.target_model.predict(next_state)[0]))
-        #q_values = reward + (self.config.GAMMA * np.amax(self.model.predict(next_state)[0]))
-
-        return q_values
-
     def train(self):
         # if there are not enough data in the replay buffer, skip the training
         if len(self.memory) < self.config.BATCH_SIZE:
@@ -75,31 +80,35 @@ class DQNAgent:
 
         # randomly sample from the replay experience que
         batch = random.sample(self.memory, self.config.BATCH_SIZE)
-
+        
         # bellman equation for the q values
         for state, action, reward, next_state, done in batch:
-            q_update = reward
-            
-            # bellman equation
-            if not done:
-                q_update = self.bellman(reward, next_state)
+            self.sess.run(self.model_optimizer, {self.states: state,
+                                                 self.actions: action,
+                                                 self.rewards: reward,
+                                                 self.next_states: next_state,
+                                                 self.done: done})
 
-            q_values = self.model.predict(state)
-            q_values[0][action] = q_update
-
-            # train the model
-            self.model.fit(state, q_values, verbose=0)
+        # if the exploration rate is greater than the set minimum, apply the decay rate
+        if self.config.EPSILON > self.config.MIN_EPSILON:
+            self.config.EPSILON *= self.config.EPSILON_DECAY
 
     def soft_update(self):
-        # update weights of the target_model (with weights of the primary model)
-        #print(self.model.get_weights())
-        self.target_model.set_weights(self.model.get_weights())
-
-    def load(self, name):
-        # load saved model
-        self.model.load_weights(name)
-
-    def save(self, name):
-        # save model weights
-        self.model.save_weights(name)
+    # obtain all the variables in the Q target network
+        self.target_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope = 'Target')
         
+        # obtain all the variables in the Q primary network
+        self.primary_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope = 'Primary')
+
+        # run the soft-update process
+        self.sess.run([var_t.assign(self.config.TAU * var + (1.0 - self.config.TAU) * var_t) for var_t, var in zip(self.target_vars, self.primary_vars)])
+
+    def load(self):
+        # load saved model
+        self.imported_graph = tf.train.import_meta_graph('model.meta')
+        self.imported_graph.restore(self.sess, './model')
+
+    def save(self):
+        # save model weights
+        self.saver = tf.train.Saver()
+        self.saver.save(self.sess, './model')

@@ -7,17 +7,17 @@ from dqn_tf_networks import DQNAgent
 from dqn_tf_config import Config
 
 
-# set the config class
-config = Config()
-
 def cartpole():
+    # set the config class
+    config = Config()
+
     # environment parameters
     env = gym.make("CartPole-v1")
     state_size = env.observation_space.shape[0]
     action_size = env.action_space.n
     
     sess = tf.compat.v1.Session()
-    dqn = DQNAgent(sess, state_size, action_size, config)
+    dqn = DQNAgent(sess, config, state_size, action_size)
     
     step = 0
     for episode in range(config.EPISODES):

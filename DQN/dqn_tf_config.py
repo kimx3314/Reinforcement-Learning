@@ -1,6 +1,5 @@
 # sean sungil kim
 
-
 class Config:
     def __init__(self):
         self.BATCH_SIZE = 64
