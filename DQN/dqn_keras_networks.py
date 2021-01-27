@@ -31,13 +31,9 @@ class DQNAgent:
 
         # output shape should be the action size
         model.add(Dense(self.action_size, activation = 'linear'))
-        model.compile(loss = self.custom_loss, optimizer = Adam(lr = self.config.LEARNING_RATE))
+        model.compile(loss = 'MSE', optimizer = Adam(lr = self.config.LEARNING_RATE))
 
         return model
-
-    def custom_loss(self, yTrue, yPred):
-        # MSE loss
-        return K.mean(K.square(yTrue - np.amax(yPred)))
 
     def act(self, state):
         # if the exploration rate is below or equal to the random sample from a uniform distribution over [0, 1), return a random action
