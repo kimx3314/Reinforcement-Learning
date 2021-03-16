@@ -1,0 +1,15 @@
+{
+    "SIMULATOR_VERSION" : "ShinSaeGae_v0",
+    "EPISODES"          : 1700,
+    "BATCH_SIZE"        : 256,
+    "ACTOR_LR"          : 0.002,
+    "CRITIC_LR"         : 0.002,
+    "GAMMA"             : 0.9,
+    "TAU"               : 0.01,
+    "EPSILON"           : 1.0,
+    "EPSILON_DECAY"     : 0.98,
+    "E_PROD_STAND_DEV"  : 2000.0,
+    "DAMP_STAND_DEV"    : 0.1,
+    "COUNTER"           : 0,
+    "MEMORY_CAPACITY"   : 4000
+}
