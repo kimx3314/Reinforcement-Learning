@@ -87,7 +87,7 @@ def return_linegraph(result_data):
     plt.figure(figsize=(12, 4))
     plt.plot(result_data['Return'], linewidth=0.7)
     plt.xlabel('$Episodes$'), plt.ylabel('$Return$')
-    plt.title('$Episodes$ $vs.$ $Return$')
+    plt.title('$Return$ $vs.$ $Episodes$')
     plt.savefig('./RESULTS/episodes_vs_return.png')
 
 
@@ -142,6 +142,7 @@ if __name__ == "__main__":
 
             # store it in the replay experience queue and go to the next state
             ddpg.remember(state, action, reward, next_state)
+            #print('State :\t', state, 'Action :\t', action, 'Reward :\t', reward, 'Next State :\t',next_state)
 
             # if there are enough instances in the replay experience queue, start the training
             if config['COUNTER'] > config['MEMORY_CAPACITY']:
