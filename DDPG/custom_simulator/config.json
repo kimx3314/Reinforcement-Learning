@@ -1,6 +1,6 @@
 {
     "SIMULATOR_VERSION" : "ShinSaeGae_v0",
-    "EPISODES"          : 1000,
+    "EPISODES"          : 1800,
     "BATCH_SIZE"        : 256,
     "ACTOR_LR"          : 0.001,
     "CRITIC_LR"         : 0.002,

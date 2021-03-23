@@ -88,7 +88,7 @@ def return_linegraph(result_data):
     plt.plot(result_data['Return'], linewidth=0.7)
     plt.xlabel('$Episodes$'), plt.ylabel('$Return$')
     plt.title('$Return$ $vs.$ $Episodes$')
-    plt.savefig('./RESULTS/episodes_vs_return.png')
+    plt.savefig('./RESULTS/return_vs_episodes.png')
 
 
 with open(os.getcwd()+'/config.json') as f:

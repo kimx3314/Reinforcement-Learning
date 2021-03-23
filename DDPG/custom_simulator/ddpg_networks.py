@@ -43,8 +43,7 @@ class DDPG(object):
 
         with tf.compat.v1.variable_scope('Critic'):
             # q-values from critic
-            #q = self.build_critic(self.states, self.actions, scope='primary')
-            self.q = self.build_critic(self.states, self.actions, scope='primary')  # by soh
+            self.q = self.build_critic(self.states, self.actions, scope='primary')
             q_target = self.build_critic(self.next_states, actions_target, scope='target', trainable=False)
 
         # actor and critic parameters
@@ -58,8 +57,7 @@ class DDPG(object):
         q_target_bellman = self.rewards + self.config['GAMMA'] * q_target
 
         # maximize the q
-        #self.actor_loss = -tf.reduce_mean(q, name = 'Actor_loss')
-        self.actor_loss = -tf.reduce_mean(self.q, name = 'Actor_loss')  # by soh
+        self.actor_loss = -tf.reduce_mean(self.q, name = 'Actor_loss')
         self.actor_optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=self.config['ACTOR_LR'], name = 'Actor_Adam_opt').minimize(self.actor_loss, var_list=self.actor_params)
 
         # MSE loss, temporal difference error
@@ -197,14 +195,11 @@ class DDPG(object):
         batch_data_next_state = replay_batch[:, -self.state_size:]
 
         # train the actor and the critic
-        _, current_actions = self.sess.run([self.actor_optimizer, self.actions], {self.states: batch_data_state}) # by soh
-        #print("actions={}".format(current_actions))  # by soh
-
-        _, current_q = self.sess.run([self.critic_optimizer, self.q], {self.states: batch_data_state,  # by soh
-                                                                       self.actions: batch_data_action,
-                                                                       self.rewards: batch_data_reward,
-                                                                       self.next_states: batch_data_next_state})
-        #print("q={}".format(current_q))  # by soh
+        self.sess.run(self.actor_optimizer, {self.states: batch_data_state})
+        self.sess.run(self.critic_optimizer, {self.states: batch_data_state,
+                                              self.actions: batch_data_action,
+                                              self.rewards: batch_data_reward,
+                                              self.next_states: batch_data_next_state})
         
         # document actor and critic loss
         current_actor_loss = self.sess.run(self.actor_loss, {self.states: batch_data_state})
@@ -228,7 +223,6 @@ class DDPG(object):
         plt.figure(figsize=(16, 4))
         plt.plot(self.critic_loss_lst, linewidth=0.3)
         plt.xlabel('$Steps$'), plt.ylabel('$Loss$')
-        #plt.ylim((-3000, 16000))
         plt.title('$Critic$ $Loss$')
         plt.savefig('./RESULTS/critic_loss.png')
 
