@@ -85,17 +85,23 @@ class DDPG(object):
     def build_actor(self, states, scope, trainable=True):
         with tf.compat.v1.variable_scope(scope):
             # fully connected layers
-            fc_1 = tf.compat.v1.layers.dense(states, 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1', trainable=trainable)
-            fc_2 = tf.compat.v1.layers.dense(fc_1, 16, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2', trainable=trainable)
+            fc_1 = tf.compat.v1.layers.dense(states, 32, activation=tf.nn.relu, kernel_initializer=tf.compat.v1.truncated_normal_initializer(), \
+                                             kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1', trainable=trainable)
+            fc_2 = tf.compat.v1.layers.dense(fc_1, 16, activation=tf.nn.relu, kernel_initializer=tf.compat.v1.truncated_normal_initializer(), \
+                                             kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2', trainable=trainable)
 
             # tanh activation puts the output in the range of [-1, 1]
             # e_prod_action is in the range of [-1, 1]
-            fc_3_1        = tf.compat.v1.layers.dense(fc_2, 8, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3_1', trainable=trainable)
-            e_prod_action = tf.compat.v1.layers.dense(fc_3_1, 1, activation=tf.nn.tanh, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='e_prod_action', trainable=trainable)
+            fc_3_1        = tf.compat.v1.layers.dense(fc_2, 8, activation=tf.nn.relu, kernel_initializer=tf.compat.v1.truncated_normal_initializer(), \
+                                                      kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3_1', trainable=trainable)
+            e_prod_action = tf.compat.v1.layers.dense(fc_3_1, 1, activation=tf.nn.tanh, kernel_initializer=tf.compat.v1.truncated_normal_initializer(), \
+                                                      kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='e_prod_action', trainable=trainable)
 
             # damper_action cannot be negative, hence relu activation
-            fc_3_2        = tf.compat.v1.layers.dense(fc_2, 8, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3_2', trainable=trainable)
-            damper_action = tf.clip_by_value(tf.compat.v1.layers.dense(fc_3_2, 1, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), self.action_lower_bound[1], self.action_upper_bound[1], name='damper_action')
+            fc_3_2        = tf.compat.v1.layers.dense(fc_2, 8, activation=tf.nn.relu, kernel_initializer=tf.compat.v1.truncated_normal_initializer(), \
+                                                      kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3_2', trainable=trainable)
+            damper_action = tf.clip_by_value(tf.compat.v1.layers.dense(fc_3_2, 1, activation=tf.nn.relu, kernel_initializer=tf.compat.v1.truncated_normal_initializer(), \
+                                                                       kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), self.action_lower_bound[1], self.action_upper_bound[1], name='damper_action')
 
             # concatenate to output
             out = tf.concat([e_prod_action, damper_action], axis=1, name='out')
@@ -131,13 +137,17 @@ class DDPG(object):
     def build_critic(self, states, actions, scope, trainable=True):
         with tf.compat.v1.variable_scope(scope):
             # fully connected layers
-            fc_1_1 = tf.compat.v1.layers.dense(states, 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1_1', trainable=trainable)
-            fc_1_2 = tf.compat.v1.layers.dense(actions, 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1_2', trainable=trainable)
+            fc_1_1 = tf.compat.v1.layers.dense(states, 32, activation=tf.nn.relu, kernel_initializer=tf.compat.v1.truncated_normal_initializer(), \
+                                               kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1_1', trainable=trainable)
+            fc_1_2 = tf.compat.v1.layers.dense(actions, 32, activation=tf.nn.relu, kernel_initializer=tf.compat.v1.truncated_normal_initializer(), \
+                                               kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1_2', trainable=trainable)
             fc_1   = tf.concat([fc_1_1, fc_1_2], axis=1, name='fc_1')
 
-            fc_2 = tf.compat.v1.layers.dense(fc_1, 16, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2', trainable=trainable)
+            fc_2 = tf.compat.v1.layers.dense(fc_1, 16, activation=tf.nn.relu, kernel_initializer=tf.compat.v1.truncated_normal_initializer(), \
+                                             kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2', trainable=trainable)
 
-            out = tf.compat.v1.layers.dense(fc_2, 1, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='out', trainable=trainable)
+            out = tf.compat.v1.layers.dense(fc_2, 1, kernel_initializer=tf.compat.v1.truncated_normal_initializer(), \
+                                            kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='out', trainable=trainable)
             
             return out
 

@@ -253,7 +253,7 @@ if __name__ == "__main__":
     with open(os.getcwd()+'/config.json') as f:
         config = json.load(f)
 
-    #run_rl('train', config)
+    run_rl('train', config)
     run_rl('test', config)
 
     print('\n=================================================================================================================')
