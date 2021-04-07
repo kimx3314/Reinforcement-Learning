@@ -50,13 +50,13 @@ def conv_to_calamp(data):
 def daily_heatmap(vis_data, col_name, MODE, filename):
     if col_name == 'Return':
         vmin = vis_data[col_name].min()
-        vmax = 0
+        vmax = vis_data[col_name].max()
         cmap = "Blues"
 
     elif col_name == 'e_prod_saved_percent':
         vmin = -100
         vmax = 100
-        cmap = sns.color_palette("coolwarm_r", as_cmap=True)
+        cmap = "coolwarm_r"
     
     daily_data_2020 = vis_data[vis_data['Year'] == 2020]
     daily_data_2019 = vis_data[vis_data['Year'] == 2019]
@@ -167,8 +167,7 @@ def run_rl(MODE, config):
         config['EPISODES'] = 1040
 
     # ddpg is specifically adapted for environments with continuous action spaces
-    sess = tf.compat.v1.Session()
-    ddpg = DDPG(sess, config, MODE, state_size, action_size, action_lower_bound, action_upper_bound)
+    ddpg = DDPG(config, MODE, state_size, action_size, action_lower_bound, action_upper_bound)
 
     step = 0
     date_lst, return_lst = [], []
@@ -253,7 +252,7 @@ if __name__ == "__main__":
     with open(os.getcwd()+'/config.json') as f:
         config = json.load(f)
 
-    run_rl('train', config)
+    #run_rl('train', config)
     run_rl('test', config)
 
     print('\n=================================================================================================================')

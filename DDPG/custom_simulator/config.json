@@ -11,5 +11,6 @@
     "E_PROD_STAND_DEV"  : 0.2,
     "DAMP_STAND_DEV"    : 0.1,
     "COUNTER"           : 0,
-    "MEMORY_CAPACITY"   : 2000
+    "MEMORY_CAPACITY"   : 2000,
+    "LOAD_CHECK"        : false
 }

@@ -6,12 +6,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from collections import deque
 import random
+import sys
 import warnings
 warnings.filterwarnings("ignore")
 
 
 class DDPG(object):
-    def __init__(self, sess, config, MODE, state_size, action_size, action_lower_bound, action_upper_bound):
+    def __init__(self,config, MODE, state_size, action_size, action_lower_bound, action_upper_bound):
         self.actor_loss_lst        = []
         self.critic_loss_lst       = []
         self.actor_loss_threshold  = None
@@ -21,7 +22,6 @@ class DDPG(object):
         self.config             = config
         self.MODE               = MODE
         self.iteration          = 0
-        self.sess               = sess
         self.memory             = deque(maxlen = self.config['MEMORY_CAPACITY'])
         self.state_size         = state_size
         self.action_size        = action_size
@@ -69,39 +69,35 @@ class DDPG(object):
         # global variable initialization
         init_op = tf.compat.v1.global_variables_initializer()
 
-        if self.MODE == 'train':
-            # initialize/restore all variables
-            self.actor_saver = tf.compat.v1.train.Saver(var_list=self.actor_params)
-            self.critic_saver = tf.compat.v1.train.Saver(var_list=self.critic_params)
-            self.sess.run(init_op)
+        # savers
+        self.actor_saver = tf.compat.v1.train.Saver(var_list=self.actor_params)
+        self.critic_saver = tf.compat.v1.train.Saver(var_list=self.critic_params)
+        
+        # start the session and initialize the variables
+        self.sess = tf.compat.v1.Session()
+        self.sess.run(init_op)
 
-        elif self.MODE == 'test':
-            self.sess.run(init_op)
+        if self.MODE == 'test':
+            # restore all variables
             self.load()
 
-            # update the target networks
+            # soft-update for the target networks
             self.soft_update()
 
     def build_actor(self, states, scope, trainable=True):
         with tf.compat.v1.variable_scope(scope):
             # fully connected layers
-            fc_1 = tf.compat.v1.layers.dense(states, 32, activation=tf.nn.relu, kernel_initializer=tf.compat.v1.truncated_normal_initializer(), \
-                                             kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1', trainable=trainable)
-            fc_2 = tf.compat.v1.layers.dense(fc_1, 16, activation=tf.nn.relu, kernel_initializer=tf.compat.v1.truncated_normal_initializer(), \
-                                             kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2', trainable=trainable)
+            fc_1 = tf.compat.v1.layers.dense(states, 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1', trainable=trainable)
+            fc_2 = tf.compat.v1.layers.dense(fc_1, 16, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2', trainable=trainable)
 
             # tanh activation puts the output in the range of [-1, 1]
             # e_prod_action is in the range of [-1, 1]
-            fc_3_1        = tf.compat.v1.layers.dense(fc_2, 8, activation=tf.nn.relu, kernel_initializer=tf.compat.v1.truncated_normal_initializer(), \
-                                                      kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3_1', trainable=trainable)
-            e_prod_action = tf.compat.v1.layers.dense(fc_3_1, 1, activation=tf.nn.tanh, kernel_initializer=tf.compat.v1.truncated_normal_initializer(), \
-                                                      kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='e_prod_action', trainable=trainable)
+            fc_3_1        = tf.compat.v1.layers.dense(fc_2, 8, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3_1', trainable=trainable)
+            e_prod_action = tf.compat.v1.layers.dense(fc_3_1, 1, activation=tf.nn.tanh, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='e_prod_action', trainable=trainable)
 
             # damper_action cannot be negative, hence relu activation
-            fc_3_2        = tf.compat.v1.layers.dense(fc_2, 8, activation=tf.nn.relu, kernel_initializer=tf.compat.v1.truncated_normal_initializer(), \
-                                                      kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3_2', trainable=trainable)
-            damper_action = tf.clip_by_value(tf.compat.v1.layers.dense(fc_3_2, 1, activation=tf.nn.relu, kernel_initializer=tf.compat.v1.truncated_normal_initializer(), \
-                                                                       kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), self.action_lower_bound[1], self.action_upper_bound[1], name='damper_action')
+            fc_3_2        = tf.compat.v1.layers.dense(fc_2, 8, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3_2', trainable=trainable)
+            damper_action = tf.clip_by_value(tf.compat.v1.layers.dense(fc_3_2, 1, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), self.action_lower_bound[1], self.action_upper_bound[1], name='damper_action')
 
             # concatenate to output
             out = tf.concat([e_prod_action, damper_action], axis=1, name='out')
@@ -137,17 +133,13 @@ class DDPG(object):
     def build_critic(self, states, actions, scope, trainable=True):
         with tf.compat.v1.variable_scope(scope):
             # fully connected layers
-            fc_1_1 = tf.compat.v1.layers.dense(states, 32, activation=tf.nn.relu, kernel_initializer=tf.compat.v1.truncated_normal_initializer(), \
-                                               kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1_1', trainable=trainable)
-            fc_1_2 = tf.compat.v1.layers.dense(actions, 32, activation=tf.nn.relu, kernel_initializer=tf.compat.v1.truncated_normal_initializer(), \
-                                               kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1_2', trainable=trainable)
+            fc_1_1 = tf.compat.v1.layers.dense(states, 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1_1', trainable=trainable)
+            fc_1_2 = tf.compat.v1.layers.dense(actions, 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1_2', trainable=trainable)
             fc_1   = tf.concat([fc_1_1, fc_1_2], axis=1, name='fc_1')
 
-            fc_2 = tf.compat.v1.layers.dense(fc_1, 16, activation=tf.nn.relu, kernel_initializer=tf.compat.v1.truncated_normal_initializer(), \
-                                             kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2', trainable=trainable)
+            fc_2 = tf.compat.v1.layers.dense(fc_1, 16, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2', trainable=trainable)
 
-            out = tf.compat.v1.layers.dense(fc_2, 1, kernel_initializer=tf.compat.v1.truncated_normal_initializer(), \
-                                            kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='out', trainable=trainable)
+            out = tf.compat.v1.layers.dense(fc_2, 1, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='out', trainable=trainable)
             
             return out
 
@@ -238,12 +230,12 @@ class DDPG(object):
         # soft update
         self.soft_update()
 
-        if len(self.actor_loss_lst) == 30000:
+        if len(self.actor_loss_lst) == 10000:
             print('\t\t\t\t\t\t\t\t----------- DDPG MIN THRESHOLD SET -----------\t\t\t\t\t\t\t\t')
             self.actor_loss_threshold  = current_actor_loss
             self.critic_loss_threshold = current_critic_loss
             
-        elif len(self.actor_loss_lst) > 30000:
+        elif len(self.actor_loss_lst) > 10000:
             if current_actor_loss <= self.actor_loss_threshold:
                 self.save_actor()
                 self.actor_loss_threshold = current_actor_loss
@@ -284,8 +276,26 @@ class DDPG(object):
         self.critic_saver.save(self.sess, './GRAPHS/critic')
 
     def load(self):
+        if self.config['LOAD_CHECK']:
+            stdoutOrigin=sys.stdout
+            sys.stdout = open("./actor_init.txt", "w")
+            print('==============INITIALIZED==============')
+            for acttor_param in self.actor_params:
+                print(str(acttor_param) +'\n'+ str(acttor_param.eval(session=self.sess)), '\n\n')
+            sys.stdout.close()
+            sys.stdout=stdoutOrigin
+
         self.actor_saver = tf.compat.v1.train.import_meta_graph('./GRAPHS/actor.meta')
         self.critic_saver = tf.compat.v1.train.import_meta_graph('./GRAPHS/critic.meta')
 
         self.actor_saver.restore(self.sess, './GRAPHS/actor')
         self.critic_saver.restore(self.sess, './GRAPHS/critic')
+
+        if self.config['LOAD_CHECK']:
+            stdoutOrigin=sys.stdout 
+            sys.stdout = open("./actor_load.txt", "w")
+            print('==============LOADED==============')
+            for acttor_param in self.actor_params:
+                print(str(acttor_param) +'\n'+ str(acttor_param.eval(session=self.sess)), '\n\n')
+            sys.stdout.close()
+            sys.stdout=stdoutOrigin
