@@ -92,13 +92,15 @@ def daily_heatmap(vis_data, col_name, MODE, filename):
     mappable = ax1.get_children()[0]
     cbar = plt.colorbar(mappable, ax = [ax1, ax2, ax3, ax4], orientation = 'vertical', pad = 0.03)
     cbar.ax.tick_params(labelsize = 13)
+
     if col_name == 'Return':
         cbar.ax.set_ylabel('$Return$', rotation = 270, size = 16, labelpad = 25)
         plt.suptitle('$Heatmap$ $of$ $Return$ $Trend$', size = 30, x = 0.44, y = 0.94)
     elif col_name == 'e_prod_saved_percent':
         cbar.ax.set_ylabel('$Energy$ $Production$ $Saved$ (%)', rotation = 270, size = 16, labelpad = 25)
         plt.suptitle('$Heatmap$ $of$ $Energy$ $Production$ $Saved$ $Trend$', size = 30, x = 0.44, y = 0.94)
-    plt.savefig('./RESULTS/'+MODE.upper()+'/'+filename)
+
+    plt.tight_layout(), plt.savefig('./RESULTS/'+MODE.upper()+'/'+filename)
 
 def save_heatmap_result(result_data, col_name, MODE):
     vis_data = pd.DataFrame()
@@ -111,20 +113,21 @@ def save_heatmap_result(result_data, col_name, MODE):
     daily_heatmap(vis_data, col_name, MODE, col_name.lower() + '_trend_heatmap.png')
     vis_data.to_csv('./RESULTS/' + MODE.upper() + '/' + col_name.lower() + '_heatmap_result.csv', index=False)
 
-def return_linegraph(result_data, MODE):
+def return_linegraph(result_data, MODE, training_started=None):
     if MODE == 'train':
         plt.figure(figsize=(12, 4))
-        plt.plot(result_data['Return'], linewidth=0.7)
-        plt.xlabel('$Episodes$'), plt.ylabel('$Return$')
-        plt.title('$Return$ $vs.$ $Episodes$')
+        plt.plot(result_data['Return'], linewidth=0.6, label='Daily Return')
+        plt.axvline(training_started, linewidth=2, color="r", label='Training Phase Began')
+        plt.xlabel('$Episodes$'), plt.ylabel('$Return$'), plt.legend()
+        plt.title('$Return$ $vs.$ $Episodes$'), plt.tight_layout()
         plt.savefig('./RESULTS/'+MODE.upper()+'/return_vs_episodes.png')
     elif MODE == 'test':
         dates = date2num(result_data['Date'])
 
-        plt.figure(figsize=(12, 6))
-        plt.plot_date(dates, result_data['Return'], '-', linewidth=0.7)
+        plt.figure(figsize=(12, 4))
+        plt.plot_date(dates, result_data['Return'], '-', linewidth=0.6)
         plt.xlabel('$Date$'), plt.ylabel('$Return$'), plt.xticks(rotation=45)
-        plt.title('$Return$ $Trend$')
+        plt.title('$Return$ $Trend$'), plt.tight_layout()
         plt.savefig('./RESULTS/'+MODE.upper()+'/return_trend.png')
 
 def run_rl(MODE, config):
@@ -170,6 +173,7 @@ def run_rl(MODE, config):
     ddpg = DDPG(config, MODE, state_size, action_size, action_lower_bound, action_upper_bound)
 
     step = 0
+    training_started = None
     date_lst, return_lst = [], []
     for episode in range(config['EPISODES']):
         # for each episode, reset the environment
@@ -194,6 +198,8 @@ def run_rl(MODE, config):
 
                 # if there are enough instances in the replay experience queue, start the training
                 if config['COUNTER'] > config['MEMORY_CAPACITY']:
+                    if training_started == None:
+                        training_started = episode
                     min_actor_loss, min_critic_loss = ddpg.train()
                     step += 1
 
@@ -207,10 +213,10 @@ def run_rl(MODE, config):
             # if the episode is finished, go to the next episode
             if done:
                 if MODE == 'train':
-                    print("Episode: %i / %s,\tReturn: %.4f,\tCounter: %i,\t\tE Prod Stand Dev: %.4f,\tDamper Stand Dev: %.4f,\tExploration Rate: %.4f" % \
+                    print("Episode: %i / %s\tReturn: %.1f\t\tCounter: %i\t\tE Prod Stand Dev: %.2f\t\tDamper Stand Dev: %.2f\t\tExploration Rate: %.2f" % \
                         (episode, date, total_return, config['COUNTER'], config['E_PROD_STAND_DEV'], config['DAMP_STAND_DEV'], config['EPSILON']))
                 elif MODE == 'test':
-                    print("Episode: %i / %s,\tReturn: %.4f" % (episode, date, total_return))
+                    print("Episode: %i / %s,\tReturn: %.1f" % (episode, date, total_return))
                     
                 return_lst.append(total_return)
                 break
@@ -223,7 +229,7 @@ def run_rl(MODE, config):
     if MODE == 'train':
         print('\n\nMin Actor Loss = %.4f\nMin Critic Loss = %.4f\n\n' % (min_actor_loss, min_critic_loss))
         ddpg.save_actor_critic_result()
-        return_linegraph(rl_result_data, MODE)
+        return_linegraph(rl_result_data, MODE, training_started)
     elif MODE == 'test':
         return_linegraph(rl_result_data, MODE)
 
@@ -244,15 +250,24 @@ def run_rl(MODE, config):
         daily_data['Year'] = daily_data['day'].dt.year
         daily_data['Month'] = daily_data['day'].dt.month
         daily_data['Day'] = daily_data['day'].dt.day
-        daily_data = daily_data[['Year', 'Month', 'Day', 'e_prod_saved_percent']]
+        daily_data.to_csv('./RESULTS/'+MODE.upper()+'/daily_summary.csv', index=False)
+        new_daily_data = daily_data[['Year', 'Month', 'Day', 'e_prod_saved_percent']]
 
-        save_heatmap_result(daily_data, 'e_prod_saved_percent', MODE)
+        save_heatmap_result(new_daily_data, 'e_prod_saved_percent', MODE)
+
+        monthly_data = daily_data[['Pred e_prod', 'Org e_prod', 'e_prod_saved_percent', 'Year', 'Month']]
+        monthly_data = monthly_data.groupby(['Year', 'Month']).sum().reset_index()
+        monthly_data.to_csv('./RESULTS/'+MODE.upper()+'/monthly_summary.csv', index=False)
+
+        yearly_data = daily_data[['Pred e_prod', 'Org e_prod', 'e_prod_saved_percent', 'Year']]
+        yearly_data = yearly_data.groupby(['Year']).sum().reset_index()
+        yearly_data.to_csv('./RESULTS/'+MODE.upper()+'/yearly_summary.csv', index=False)
 
 if __name__ == "__main__":
     with open(os.getcwd()+'/config.json') as f:
         config = json.load(f)
 
-    #run_rl('train', config)
+    run_rl('train', config)
     run_rl('test', config)
 
     print('\n=================================================================================================================')

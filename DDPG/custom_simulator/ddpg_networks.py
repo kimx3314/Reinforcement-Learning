@@ -93,16 +93,17 @@ class DDPG(object):
             # tanh activation puts the output in the range of [-1, 1]
             # e_prod_action is in the range of [-1, 1]
             fc_3_1        = tf.compat.v1.layers.dense(fc_2, 8, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3_1', trainable=trainable)
-            e_prod_action = tf.compat.v1.layers.dense(fc_3_1, 1, activation=tf.nn.tanh, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='e_prod_action', trainable=trainable)
+            fc_4_1        = tf.compat.v1.layers.dense(fc_3_1, 1, activation=tf.nn.tanh, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_4_1', trainable=trainable)
+            e_prod_action = tf.clip_by_value(tf.compat.v1.layers.dense(fc_4_1, 1, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), -1, 1, name='e_prod_action')
 
             # damper_action cannot be negative, hence relu activation
-            fc_3_2        = tf.compat.v1.layers.dense(fc_2, 8, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3_2', trainable=trainable)
-            damper_action = tf.clip_by_value(tf.compat.v1.layers.dense(fc_3_2, 1, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), self.action_lower_bound[1], self.action_upper_bound[1], name='damper_action')
+            #fc_3_2        = tf.compat.v1.layers.dense(fc_2, 8, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3_2', trainable=trainable)
+            #damper_action = tf.clip_by_value(tf.compat.v1.layers.dense(fc_3_2, 1, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), self.action_lower_bound[1], self.action_upper_bound[1], name='damper_action')
 
             # concatenate to output
-            out = tf.concat([e_prod_action, damper_action], axis=1, name='out')
+            #out = tf.concat([e_prod_action, damper_action], axis=1, name='out')
             
-            return out
+            return e_prod_action
 
             '''
             # weights and biases
@@ -173,16 +174,18 @@ class DDPG(object):
         elif self.MODE == 'train':
             # if the ddpg network did not begin the training phase, return random actions
             if self.config['COUNTER'] < self.config['MEMORY_CAPACITY']:
-                random_action = np.array([random.uniform(self.action_lower_bound[0], self.action_upper_bound[0]), random.uniform(self.action_lower_bound[1], self.action_upper_bound[1])])
+                #random_action = np.array([random.uniform(self.action_lower_bound[0], self.action_upper_bound[0]), random.uniform(self.action_lower_bound[1], self.action_upper_bound[1])])
+                random_action = np.array([random.uniform(self.action_lower_bound[0], self.action_upper_bound[0])])
 
                 return random_action
 
             # if the exploration rate is below or equal to the random sample from a uniform distribution over [0, 1), return a noisy action
             elif np.random.rand() <= self.config['EPSILON']:
                 # add randomness to action using normal distribution, exploration
-                noisy_action = np.array([np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 0], self.config['E_PROD_STAND_DEV']), self.action_lower_bound[0], self.action_upper_bound[0]),\
-                                        np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 1], self.config['DAMP_STAND_DEV']),   self.action_lower_bound[1], self.action_upper_bound[1])])
-                
+                #noisy_action = np.array([np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 0], self.config['E_PROD_STAND_DEV']), self.action_lower_bound[0], self.action_upper_bound[0]),\
+                #                        np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 1], self.config['DAMP_STAND_DEV']),   self.action_lower_bound[1], self.action_upper_bound[1])])
+                noisy_action = np.array([np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 0], self.config['E_PROD_STAND_DEV']), self.action_lower_bound[0], self.action_upper_bound[0])])
+
                 # decrease the epsilon and the standard deviation value
                 self.config['EPSILON']          *= self.config['EPSILON_DECAY']
                 self.config['E_PROD_STAND_DEV'] *= self.config['EPSILON_DECAY']
@@ -202,6 +205,9 @@ class DDPG(object):
         self.config['COUNTER'] += 1
 
     def train(self):
+        if self.iteration == 0:
+            print('\t\t\t\t\t\t\t\t----------- DDPG TRAINING HAS STARTED -----------\t\t\t\t\t\t\t\t')
+
         # randomly sample from the replay experience que
         replay_batch = np.array(random.sample(self.memory, self.config['BATCH_SIZE']))
         
@@ -254,13 +260,13 @@ class DDPG(object):
         plt.figure(figsize=(16, 4))
         plt.plot(self.actor_loss_lst, linewidth=0.3)
         plt.xlabel('$Steps$'), plt.ylabel('$Loss$')
-        plt.title('$Actor$ $Loss$')
+        plt.title('$Actor$ $Loss$'), plt.tight_layout()
         plt.savefig('./RESULTS/'+self.MODE.upper()+'/actor_loss.png')
 
         plt.figure(figsize=(16, 4))
         plt.plot(self.critic_loss_lst, linewidth=0.3)
         plt.xlabel('$Steps$'), plt.ylabel('$Loss$')
-        plt.title('$Critic$ $Loss$')
+        plt.title('$Critic$ $Loss$'), plt.tight_layout()
         plt.savefig('./RESULTS/'+self.MODE.upper()+'/critic_loss.png')
 
     def soft_update(self):
