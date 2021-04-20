@@ -40,7 +40,7 @@ def FrozenLake(config):
 
                 # t
                 # obtain a greedy action from the q-table with slight noise
-                action = q_networks.act(state)
+                action = q_networks.act(env, state)
 
                 # input the action to the environment, and obtain the following
                 next_state, reward, done, _ = env.step(action)

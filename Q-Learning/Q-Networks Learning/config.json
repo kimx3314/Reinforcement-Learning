@@ -1,5 +1,5 @@
 {
     "GAMMA" : 0.95,
-    "EPISODES" : 20000,
+    "EPISODES" : 2000,
     "RENDER" : false
 }
