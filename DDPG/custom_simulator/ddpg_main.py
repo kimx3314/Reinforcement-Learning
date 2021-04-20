@@ -8,6 +8,7 @@ from matplotlib.dates import date2num
 import seaborn as sns
 from ddpg_networks import DDPG
 from asi_bems import asi_bems
+import estimator_cls
 from datetime import timedelta
 import json
 import os
@@ -52,7 +53,10 @@ def daily_heatmap(vis_data, col_name, MODE, filename):
         vmin = vis_data[col_name].min()
         vmax = vis_data[col_name].max()
         cmap = "Blues"
-
+    elif col_name == 'cost_saved_percent':
+        vmin = vis_data[col_name].min()
+        vmax = vis_data[col_name].max()
+        cmap = "coolwarm_r"
     elif col_name == 'e_prod_saved_percent':
         vmin = -100
         vmax = 100
@@ -96,6 +100,9 @@ def daily_heatmap(vis_data, col_name, MODE, filename):
     if col_name == 'Return':
         cbar.ax.set_ylabel('$Return$', rotation = 270, size = 16, labelpad = 25)
         plt.suptitle('$Heatmap$ $of$ $Return$ $Trend$', size = 30, x = 0.44, y = 0.94)
+    elif col_name == 'cost_saved_percent':
+        cbar.ax.set_ylabel('$Cost$ $Saved$ (%)', rotation = 270, size = 16, labelpad = 25)
+        plt.suptitle('$Heatmap$ $of$ $Cost$ $Saved$ $Trend$', size = 30, x = 0.44, y = 0.94)
     elif col_name == 'e_prod_saved_percent':
         cbar.ax.set_ylabel('$Energy$ $Production$ $Saved$ (%)', rotation = 270, size = 16, labelpad = 25)
         plt.suptitle('$Heatmap$ $of$ $Energy$ $Production$ $Saved$ $Trend$', size = 30, x = 0.44, y = 0.94)
@@ -144,15 +151,16 @@ def run_rl(MODE, config):
 
     tf.compat.v1.reset_default_graph()
     tf.compat.v1.disable_eager_execution()
-    env = asi_bems().make(config['SIMULATOR_VERSION'], MODE)
+    estimator = estimator_cls.Estimator(config)
+    env = asi_bems().make(config['SIMULATOR_VERSION'], MODE, estimator)
 
     print('\n=================================================================================================================')
     print('=\t\t\t\t\t\t\t\t\t\t\t\t\t\t=\n=\t\t\t\t\t\t\t\t\t\t\t\t\t\t=\n=\t\t\tACTIVATING REINFORCEMENT LEARNING\t\t\t\t\t\t\t=\n=\t\t\t\t\t\t\t\t\t\t\t\t\t\t=')
     print('=\t\t\tSimulator Version \t\t: \t', config['SIMULATOR_VERSION'], '\t\t\t\t\t=\n=\t\t\t\t\t\t\t\t\t\t\t\t\t\t=')
 
     # define the state and the action space size
-    state_size = env.observation_space()['shape'][0]         #4, [OA, RA, Month, Time]
-    action_size = env.action_space()['shape'][0]             #2, [e_prod, damper]
+    state_size = env.observation_space()['shape'][0]         #6, [OA, RA, TT-RA, OA-RA, Month, Time]
+    action_size = env.action_space()['shape'][0]             #3, [nAC, nSTC, nLTC] [6, 2, 3]
     print('=\t\t\tState Size \t\t\t: \t', state_size, '\t\t\t\t\t\t=\n=\t\t\tAction Size \t\t\t: \t', action_size, '\t\t\t\t\t\t=\n=\t\t\t\t\t\t\t\t\t\t\t\t\t\t=')
     
     # upper and lower bounds of the observation space
@@ -163,7 +171,7 @@ def run_rl(MODE, config):
     # upper and lower bounds of the action space
     action_upper_bound = env.action_space()['high']
     action_lower_bound = env.action_space()['low']
-    print('=\t\t\tAction Upper Bound \t\t: \t', action_upper_bound, '\t\t\t\t=\n=\t\t\tAction Lower Bound \t\t: \t', action_lower_bound, '\t\t\t\t=\n=\t\t\t\t\t\t\t\t\t\t\t\t\t\t=\n=\t\t\t\t\t\t\t\t\t\t\t\t\t\t=')
+    print('=\t\t\tAction Upper Bound \t\t: \t', action_upper_bound, '\t\t\t\t\t=\n=\t\t\tAction Lower Bound \t\t: \t', action_lower_bound, '\t\t\t\t\t=\n=\t\t\t\t\t\t\t\t\t\t\t\t\t\t=\n=\t\t\t\t\t\t\t\t\t\t\t\t\t\t=')
     print('=================================================================================================================\n')
     
     if MODE == 'test':
@@ -182,15 +190,19 @@ def run_rl(MODE, config):
 
         # initialize the total return
         total_return = 0
-        
+        preAction = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
         while True:
             # t
             # retrieve the action from the ddpg model
             action = ddpg.act(state)
-
+            
+            # convert the action to the e_prod value
+            status = 'heat' if action[0] < 0 else 'cool'
+            ind_e_prod, e_prod = estimator.action_to_energy(action[0], action[1], action[2], preAction[-1], status)
+            
             # input the action to the environment, and obtain the following
-            next_state, reward, done = env.step(action)
-
+            next_state, reward, done = env.step(action, e_prod, ind_e_prod, status)
+            
             if MODE == 'train':
                 # store it in the replay experience queue and go to the next state
                 ddpg.remember(state, action, reward, next_state)
@@ -206,6 +218,9 @@ def run_rl(MODE, config):
             # t + 1
             # go to the next state
             state = next_state
+            preAction[-3] = preAction[-2]
+            preAction[-2] = preAction[-1]
+            preAction[-1] = action.copy()
 
             # add to the return
             total_return += reward
@@ -244,23 +259,28 @@ def run_rl(MODE, config):
         result_data = pd.read_csv('./RESULTS/TEST/result.csv')
         result_data['Korean DateTime'] = pd.to_datetime(result_data['Korean DateTime'])-timedelta(hours=6) # day starts from 6:00am
         result_data['day'] = result_data['Korean DateTime'].dt.date
-        daily_data = result_data[['day', 'Pred e_prod', 'Org e_prod']].groupby('day').apply(lambda c: c.abs().sum()).reset_index()
+        daily_data = result_data[['day', 'Pred e_prod', 'Org e_prod', 'Pred Cost', 'Org Cost']].groupby('day').apply(lambda c: c.abs().sum()).reset_index()
         daily_data['e_prod_saved_percent'] = [((daily_data['Org e_prod'].iloc[i]-daily_data['Pred e_prod'].iloc[i]) / daily_data['Org e_prod'].iloc[i])*100 if daily_data['Org e_prod'].iloc[i] != 0 else -100 for i in range(len(daily_data['Org e_prod']))]
+        daily_data['cost_saved_percent'] = [((daily_data['Org Cost'].iloc[i]-daily_data['Pred Cost'].iloc[i]) / daily_data['Org Cost'].iloc[i])*100 if daily_data['Org Cost'].iloc[i] != 0 else -100 for i in range(len(daily_data['Org Cost']))]
         daily_data['day'] = pd.to_datetime(daily_data['day'])
         daily_data['Year'] = daily_data['day'].dt.year
         daily_data['Month'] = daily_data['day'].dt.month
         daily_data['Day'] = daily_data['day'].dt.day
         daily_data.to_csv('./RESULTS/'+MODE.upper()+'/daily_summary.csv', index=False)
-        new_daily_data = daily_data[['Year', 'Month', 'Day', 'e_prod_saved_percent']]
 
-        save_heatmap_result(new_daily_data, 'e_prod_saved_percent', MODE)
+        save_heatmap_result(daily_data[['Year', 'Month', 'Day', 'e_prod_saved_percent']], 'e_prod_saved_percent', MODE)
+        save_heatmap_result(daily_data[['Year', 'Month', 'Day', 'cost_saved_percent']], 'cost_saved_percent', MODE)
 
-        monthly_data = daily_data[['Pred e_prod', 'Org e_prod', 'e_prod_saved_percent', 'Year', 'Month']]
+        monthly_data = daily_data[['Pred e_prod', 'Org e_prod', 'Pred Cost', 'Org Cost', 'Year', 'Month']]
         monthly_data = monthly_data.groupby(['Year', 'Month']).sum().reset_index()
+        monthly_data['e_prod_saved_percent'] = [((monthly_data['Org e_prod'].iloc[i]-monthly_data['Pred e_prod'].iloc[i])/monthly_data['Org e_prod'].iloc[i])*100 if monthly_data['Org e_prod'].iloc[i] != 0 else -100 for i in range(len(monthly_data['Org e_prod']))]
+        monthly_data['cost_saved_percent'] = [((monthly_data['Org Cost'].iloc[i]-monthly_data['Pred Cost'].iloc[i])/monthly_data['Org Cost'].iloc[i])*100 if monthly_data['Org Cost'].iloc[i] != 0 else -100 for i in range(len(monthly_data['Org Cost']))]
         monthly_data.to_csv('./RESULTS/'+MODE.upper()+'/monthly_summary.csv', index=False)
 
-        yearly_data = daily_data[['Pred e_prod', 'Org e_prod', 'e_prod_saved_percent', 'Year']]
+        yearly_data = daily_data[['Pred e_prod', 'Org e_prod', 'Pred Cost', 'Org Cost', 'Year']]
         yearly_data = yearly_data.groupby(['Year']).sum().reset_index()
+        yearly_data['e_prod_saved_percent'] = [((yearly_data['Org e_prod'].iloc[i]-yearly_data['Pred e_prod'].iloc[i])/yearly_data['Org e_prod'].iloc[i])*100 if yearly_data['Org e_prod'].iloc[i] != 0 else -100 for i in range(len(yearly_data['Org e_prod']))]
+        yearly_data['cost_saved_percent'] = [((yearly_data['Org Cost'].iloc[i]-yearly_data['Pred Cost'].iloc[i])/yearly_data['Org Cost'].iloc[i])*100 if yearly_data['Org Cost'].iloc[i] != 0 else -100 for i in range(len(yearly_data['Org Cost']))]
         yearly_data.to_csv('./RESULTS/'+MODE.upper()+'/yearly_summary.csv', index=False)
 
 if __name__ == "__main__":

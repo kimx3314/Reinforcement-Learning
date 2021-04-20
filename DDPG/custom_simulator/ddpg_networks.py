@@ -25,10 +25,10 @@ class DDPG(object):
         self.memory             = deque(maxlen = self.config['MEMORY_CAPACITY'])
         self.state_size         = state_size
         self.action_size        = action_size
-        action_lower_bound[0]   = -1
-        action_upper_bound[0]   = 1
+        self.nChillers          = self.config["nChillers"] # nAC, nSTC, nLTC
         self.action_lower_bound = action_lower_bound
         self.action_upper_bound = action_upper_bound
+        self.min_action         = 0.1
 
         # placeholders for inputs
         self.states      = tf.compat.v1.placeholder(tf.float32, [None, state_size], 'States')
@@ -76,6 +76,7 @@ class DDPG(object):
         # start the session and initialize the variables
         self.sess = tf.compat.v1.Session()
         self.sess.run(init_op)
+        tf.print(self.actions, '\n\n\n\n')
 
         if self.MODE == 'test':
             # restore all variables
@@ -87,23 +88,32 @@ class DDPG(object):
     def build_actor(self, states, scope, trainable=True):
         with tf.compat.v1.variable_scope(scope):
             # fully connected layers
-            fc_1 = tf.compat.v1.layers.dense(states, 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1', trainable=trainable)
-            fc_2 = tf.compat.v1.layers.dense(fc_1, 16, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2', trainable=trainable)
+            fc_1           = tf.compat.v1.layers.dense(states, 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1', trainable=trainable)
+            fc_2           = tf.compat.v1.layers.dense(fc_1, 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2', trainable=trainable)
 
-            # tanh activation puts the output in the range of [-1, 1]
-            # e_prod_action is in the range of [-1, 1]
-            fc_3_1        = tf.compat.v1.layers.dense(fc_2, 8, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3_1', trainable=trainable)
-            fc_4_1        = tf.compat.v1.layers.dense(fc_3_1, 1, activation=tf.nn.tanh, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_4_1', trainable=trainable)
-            e_prod_action = tf.clip_by_value(tf.compat.v1.layers.dense(fc_4_1, 1, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), -1, 1, name='e_prod_action')
+            fc_3_1         = tf.compat.v1.layers.dense(fc_2, 16, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3_1', trainable=trainable)
+            fc_4_1         = tf.compat.v1.layers.dense(fc_3_1, 8, activation=tf.nn.tanh, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_4_1', trainable=trainable)
+            
+            # define lower and upper bounds
+            raw_AC_action  = tf.clip_by_value(tf.compat.v1.layers.dense(fc_4_1, 1, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), -self.nChillers[0], self.nChillers[0])
+            raw_STC_action = tf.clip_by_value(tf.compat.v1.layers.dense(fc_4_1, 1, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), 0, self.nChillers[1])
+            raw_LTC_action = tf.clip_by_value(tf.compat.v1.layers.dense(fc_4_1, 1, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), 0, self.nChillers[2])
+            
+            # filter low valued actions
+            AC_action      = tf.cond(tf.abs(raw_AC_action[0][0]) < self.min_action, lambda: tf.matmul(raw_AC_action, tf.constant([[0]], tf.float32)), lambda: raw_AC_action, name='AC_action')
+            STC_action     = tf.cond(raw_STC_action[0][0] < self.min_action, lambda: tf.matmul(raw_STC_action, tf.constant([[0]], tf.float32)), lambda: raw_STC_action, name='STC_action')
+            LTC_action     = tf.cond(raw_LTC_action[0][0] < self.min_action, lambda: tf.matmul(raw_LTC_action, tf.constant([[0]], tf.float32)), lambda: raw_LTC_action, name='LTC_action')
 
             # damper_action cannot be negative, hence relu activation
             #fc_3_2        = tf.compat.v1.layers.dense(fc_2, 8, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3_2', trainable=trainable)
             #damper_action = tf.clip_by_value(tf.compat.v1.layers.dense(fc_3_2, 1, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), self.action_lower_bound[1], self.action_upper_bound[1], name='damper_action')
 
             # concatenate to output
-            #out = tf.concat([e_prod_action, damper_action], axis=1, name='out')
+            # remove heating + cooling actions
+            out            = tf.cond(AC_action[0][0] > 0, lambda: tf.concat([AC_action, STC_action, LTC_action], axis=1), \
+                                                          lambda: tf.concat([AC_action, tf.matmul(STC_action, tf.constant([[0]], tf.float32)), tf.matmul(LTC_action, tf.constant([[0]], tf.float32))], axis=1), name='out')
             
-            return e_prod_action
+            return out
 
             '''
             # weights and biases
@@ -174,17 +184,18 @@ class DDPG(object):
         elif self.MODE == 'train':
             # if the ddpg network did not begin the training phase, return random actions
             if self.config['COUNTER'] < self.config['MEMORY_CAPACITY']:
-                #random_action = np.array([random.uniform(self.action_lower_bound[0], self.action_upper_bound[0]), random.uniform(self.action_lower_bound[1], self.action_upper_bound[1])])
-                random_action = np.array([random.uniform(self.action_lower_bound[0], self.action_upper_bound[0])])
+                random_action = np.array([random.uniform(self.action_lower_bound[0], self.action_upper_bound[0]), \
+                                          random.uniform(self.action_lower_bound[1], self.action_upper_bound[1]), \
+                                          random.uniform(self.action_lower_bound[2], self.action_upper_bound[2])])
 
                 return random_action
 
             # if the exploration rate is below or equal to the random sample from a uniform distribution over [0, 1), return a noisy action
             elif np.random.rand() <= self.config['EPSILON']:
                 # add randomness to action using normal distribution, exploration
-                #noisy_action = np.array([np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 0], self.config['E_PROD_STAND_DEV']), self.action_lower_bound[0], self.action_upper_bound[0]),\
-                #                        np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 1], self.config['DAMP_STAND_DEV']),   self.action_lower_bound[1], self.action_upper_bound[1])])
-                noisy_action = np.array([np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 0], self.config['E_PROD_STAND_DEV']), self.action_lower_bound[0], self.action_upper_bound[0])])
+                noisy_action = np.array([np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 0], self.config['E_PROD_STAND_DEV']), self.action_lower_bound[0], self.action_upper_bound[0]), \
+                                         np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 1], self.config['E_PROD_STAND_DEV']), self.action_lower_bound[1], self.action_upper_bound[2]), \
+                                         np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 2], self.config['E_PROD_STAND_DEV']), self.action_lower_bound[1], self.action_upper_bound[2])])
 
                 # decrease the epsilon and the standard deviation value
                 self.config['EPSILON']          *= self.config['EPSILON_DECAY']
@@ -210,7 +221,7 @@ class DDPG(object):
 
         # randomly sample from the replay experience que
         replay_batch = np.array(random.sample(self.memory, self.config['BATCH_SIZE']))
-        
+
         # obtain the batch data for training
         batch_data_state      = replay_batch[:, :self.state_size]
         batch_data_action     = replay_batch[:, self.state_size: self.state_size + self.action_size]
@@ -305,3 +316,4 @@ class DDPG(object):
                 print(str(acttor_param) +'\n'+ str(acttor_param.eval(session=self.sess)), '\n\n')
             sys.stdout.close()
             sys.stdout=stdoutOrigin
+            
