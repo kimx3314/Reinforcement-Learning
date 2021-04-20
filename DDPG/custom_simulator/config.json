@@ -1,6 +1,13 @@
 {
     "SIMULATOR_VERSION" : "ShinSaeGae_v0",
-    "EPISODES"          : 1600,
+
+    "nChillers"         : [6, 2, 3],
+    "AC_cool_max_cap"   : 4250,
+    "AC_heat_max_cap"   : 5310,
+    "STC_max_cap"       : 2600,
+    "LTC_max_cap"       : 7300,
+
+    "EPISODES"          : 1800,
     "BATCH_SIZE"        : 256,
     "ACTOR_LR"          : 0.001,
     "CRITIC_LR"         : 0.002,
@@ -12,5 +19,6 @@
     "DAMP_STAND_DEV"    : 0.1,
     "COUNTER"           : 0,
     "MEMORY_CAPACITY"   : 20000,
+    
     "LOAD_CHECK"        : false
 }
