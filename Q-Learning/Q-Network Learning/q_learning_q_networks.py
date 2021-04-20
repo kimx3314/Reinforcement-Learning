@@ -39,7 +39,7 @@ class Q_Networks_Agent:
         bellman_Qs = self.sess.run(self.q_networks, feed_dict={self.states:np.identity(16)[state:state+1]})
         bellman_Qs[0, action] = reward + (self.config['GAMMA'] * next_max_Q)
 
-        #Train our network using target and predicted Q values
+        # train the q-networks with the updated Qs with the bellamn equation
         self.sess.run(self.optimizer, feed_dict={self.states:np.identity(16)[state:state+1], \
                                                  self.next_Qs:bellman_Qs})
 
