@@ -1,21 +1,21 @@
 {
     "SIMULATOR_VERSION" : "ShinSaeGae_v0",
-
-    "nChillers"         : [6, 2, 3],
+    
+    "nChillers"         : [6.0, 2.0, 3.0],
     "AC_cool_max_cap"   : 4250,
     "AC_heat_max_cap"   : 5310,
     "STC_max_cap"       : 2600,
     "LTC_max_cap"       : 7300,
 
-    "EPISODES"          : 1800,
+    "EPISODES"          : 1700,
     "BATCH_SIZE"        : 256,
     "ACTOR_LR"          : 0.001,
     "CRITIC_LR"         : 0.002,
-    "GAMMA"             : 0.9,
+    "GAMMA"             : 0.95,
     "TAU"               : 0.01,
     "EPSILON"           : 1.0,
-    "EPSILON_DECAY"     : 0.99,
-    "E_PROD_STAND_DEV"  : 0.2,
+    "EPSILON_DECAY"     : 0.95,
+    "CHILLER_STAND_DEV" : 1.0,
     "DAMP_STAND_DEV"    : 0.1,
     "COUNTER"           : 0,
     "MEMORY_CAPACITY"   : 20000,

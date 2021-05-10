@@ -19,64 +19,63 @@ class DDPG(object):
         self.critic_loss_threshold = None
 
         # initialize the parameters and the model
-        self.config             = config
-        self.MODE               = MODE
-        self.iteration          = 0
-        self.memory             = deque(maxlen = self.config['MEMORY_CAPACITY'])
-        self.state_size         = state_size
-        self.action_size        = action_size
-        self.nChillers          = self.config["nChillers"] # nAC, nSTC, nLTC
-        self.action_lower_bound = action_lower_bound
-        self.action_upper_bound = action_upper_bound
-        self.min_action         = 0.1
+        self.config                = config
+        self.MODE                  = MODE
+        self.iteration             = 0
+        self.memory                = deque(maxlen = self.config['MEMORY_CAPACITY'])
+        self.state_size            = state_size
+        self.action_size           = action_size
+        self.nChillers             = self.config["nChillers"] # nAC, nSTC, nLTC
+        self.action_lower_bound    = action_lower_bound
+        self.action_upper_bound    = action_upper_bound
+        self.min_action            = 0.1
 
         # placeholders for inputs
-        self.states      = tf.compat.v1.placeholder(tf.float32, [None, state_size], 'States')
-        self.next_states = tf.compat.v1.placeholder(tf.float32, [None, state_size], 'Next_states')
-        self.rewards     = tf.compat.v1.placeholder(tf.float32, [None, 1], 'Rewards')
+        self.states                = tf.compat.v1.placeholder(tf.float32, [None, state_size], 'States')
+        self.next_states           = tf.compat.v1.placeholder(tf.float32, [None, state_size], 'Next_states')
+        self.rewards               = tf.compat.v1.placeholder(tf.float32, [None, 1], 'Rewards')
 
         with tf.compat.v1.variable_scope('Actor'):
             # actions from actor
-            self.actions   = self.build_actor(self.states, scope='primary')
-            actions_target = self.build_actor(self.next_states, scope='target', trainable=False)
+            self.actions           = self.build_actor(self.states, scope='primary')
+            actions_target         = self.build_actor(self.next_states, scope='target', trainable=False)
 
         with tf.compat.v1.variable_scope('Critic'):
             # q-values from critic
-            self.q   = self.build_critic(self.states, self.actions, scope='primary')
-            q_target = self.build_critic(self.next_states, actions_target, scope='target', trainable=False)
+            self.q                 = self.build_critic(self.states, self.actions, scope='primary')
+            q_target               = self.build_critic(self.next_states, actions_target, scope='target', trainable=False)
 
         # actor and critic parameters
-        self.actor_params    = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope='Actor/primary')
-        self.actor_t_params  = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope='Actor/target')
-        self.critic_params   = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope='Critic/primary')
-        self.critic_t_params = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope='Critic/target')
+        self.actor_params          = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope='Actor/primary')
+        self.actor_t_params        = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope='Actor/target')
+        self.critic_params         = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope='Critic/primary')
+        self.critic_t_params       = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope='Critic/target')
 
         # the Bellman equation
         # Q(s,a) = r + γ(max(Q(s’,a’))
-        q_target_bellman = self.rewards + self.config['GAMMA'] * q_target
+        q_target_bellman           = self.rewards + self.config['GAMMA'] * q_target
 
         # maximize the q
-        self.actor_loss      = -tf.reduce_mean(self.q, name = 'Actor_loss')
-        self.actor_optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=self.config['ACTOR_LR'], name = 'Actor_Adam_opt').minimize(self.actor_loss, var_list=self.actor_params)
+        self.actor_loss            = -tf.reduce_mean(self.q, name = 'Actor_loss')
+        self.actor_optimizer       = tf.compat.v1.train.AdamOptimizer(learning_rate=self.config['ACTOR_LR'], name = 'Actor_Adam_opt').minimize(self.actor_loss, var_list=self.actor_params)
 
         # MSE loss, temporal difference error
-        self.critic_loss      = tf.compat.v1.losses.mean_squared_error(labels=q_target_bellman, predictions=self.q, scope='Critic_loss')
-        self.critic_optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=self.config['CRITIC_LR'], name = 'Critic_Adam_opt').minimize(self.critic_loss, var_list=self.critic_params)
+        self.critic_loss           = tf.compat.v1.losses.mean_squared_error(labels=q_target_bellman, predictions=self.q, scope='Critic_loss')
+        self.critic_optimizer      = tf.compat.v1.train.AdamOptimizer(learning_rate=self.config['CRITIC_LR'], name = 'Critic_Adam_opt').minimize(self.critic_loss, var_list=self.critic_params)
 
         # obtain all the variables in the primary and target networks and soft update (target net replacement)
         self.soft_update_variables = [tf.compat.v1.assign(var_t, (1 - self.config['TAU']) * var_t + self.config['TAU'] * var_e) for var_t, var_e in zip(self.actor_t_params + self.critic_t_params, self.actor_params + self.critic_params)]
 
         # global variable initialization
-        init_op = tf.compat.v1.global_variables_initializer()
+        init_op                    = tf.compat.v1.global_variables_initializer()
 
         # savers
-        self.actor_saver = tf.compat.v1.train.Saver(var_list=self.actor_params)
-        self.critic_saver = tf.compat.v1.train.Saver(var_list=self.critic_params)
+        self.actor_saver           = tf.compat.v1.train.Saver(var_list=self.actor_params)
+        self.critic_saver          = tf.compat.v1.train.Saver(var_list=self.critic_params)
         
         # start the session and initialize the variables
         self.sess = tf.compat.v1.Session()
         self.sess.run(init_op)
-        tf.print(self.actions, '\n\n\n\n')
 
         if self.MODE == 'test':
             # restore all variables
@@ -87,59 +86,54 @@ class DDPG(object):
 
     def build_actor(self, states, scope, trainable=True):
         with tf.compat.v1.variable_scope(scope):
-            # fully connected layers
-            fc_1           = tf.compat.v1.layers.dense(states, 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1', trainable=trainable)
-            fc_2           = tf.compat.v1.layers.dense(fc_1, 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2', trainable=trainable)
+            if self.config['SIMULATOR_VERSION'] == "ShinSaeGae_v0":
+                # fully connected layers
+                # temperature related states
+                fc_1_1                   = tf.compat.v1.layers.dense(states[:, :4], 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1_1', trainable=trainable)
+                fc_2_1                   = tf.compat.v1.layers.dense(fc_1_1, 16, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2_1', trainable=trainable)
 
-            fc_3_1         = tf.compat.v1.layers.dense(fc_2, 16, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3_1', trainable=trainable)
-            fc_4_1         = tf.compat.v1.layers.dense(fc_3_1, 8, activation=tf.nn.tanh, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_4_1', trainable=trainable)
-            
-            # define lower and upper bounds
-            raw_AC_action  = tf.clip_by_value(tf.compat.v1.layers.dense(fc_4_1, 1, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), -self.nChillers[0], self.nChillers[0])
-            raw_STC_action = tf.clip_by_value(tf.compat.v1.layers.dense(fc_4_1, 1, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), 0, self.nChillers[1])
-            raw_LTC_action = tf.clip_by_value(tf.compat.v1.layers.dense(fc_4_1, 1, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), 0, self.nChillers[2])
-            
-            # filter low valued actions
-            AC_action      = tf.cond(tf.abs(raw_AC_action[0][0]) < self.min_action, lambda: tf.matmul(raw_AC_action, tf.constant([[0]], tf.float32)), lambda: raw_AC_action, name='AC_action')
-            STC_action     = tf.cond(raw_STC_action[0][0] < self.min_action, lambda: tf.matmul(raw_STC_action, tf.constant([[0]], tf.float32)), lambda: raw_STC_action, name='STC_action')
-            LTC_action     = tf.cond(raw_LTC_action[0][0] < self.min_action, lambda: tf.matmul(raw_LTC_action, tf.constant([[0]], tf.float32)), lambda: raw_LTC_action, name='LTC_action')
+                # time and cost related states
+                fc_1_2                   = tf.compat.v1.layers.dense(states[:, 4:], 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1_2', trainable=trainable)
+                fc_2_2                   = tf.compat.v1.layers.dense(fc_1_2, 16, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2_2', trainable=trainable)
 
-            # damper_action cannot be negative, hence relu activation
-            #fc_3_2        = tf.compat.v1.layers.dense(fc_2, 8, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3_2', trainable=trainable)
-            #damper_action = tf.clip_by_value(tf.compat.v1.layers.dense(fc_3_2, 1, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), self.action_lower_bound[1], self.action_upper_bound[1], name='damper_action')
+                fc_3_concat              = tf.concat([fc_2_1, fc_2_2], axis=1, name='fc_3_concat')
+                fc_3                     = tf.compat.v1.layers.dense(fc_3_concat, 16, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3', trainable=trainable)
 
-            # concatenate to output
-            # remove heating + cooling actions
-            out            = tf.cond(AC_action[0][0] > 0, lambda: tf.concat([AC_action, STC_action, LTC_action], axis=1), \
-                                                          lambda: tf.concat([AC_action, tf.matmul(STC_action, tf.constant([[0]], tf.float32)), tf.matmul(LTC_action, tf.constant([[0]], tf.float32))], axis=1), name='out')
-            
+                # define lower and upper bounds
+                # tf.clip_by_value(t, clip_value_min, clip_value_max)
+                raw_chiller_actions      = tf.clip_by_value(tf.compat.v1.layers.dense(fc_3, 3, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), \
+                                                       tf.constant([[-self.nChillers[0], 0.0, 0.0]], tf.float32), tf.constant([[self.nChillers[0], self.nChillers[1], self.nChillers[2]]], tf.float32), name='raw_chiller_actions')
+
+                # remove very small actions
+                # tf.where(condition, x_true, y_false)
+                AC_filtered              = tf.where(tf.concat([tf.abs(raw_chiller_actions[:, :1]) < self.min_action, tf.fill([tf.shape(raw_chiller_actions)[0], 2], False)], axis=1), \
+                                                    tf.multiply(raw_chiller_actions, tf.fill(tf.shape(raw_chiller_actions), 0.0)), raw_chiller_actions, name='AC_filtered')
+                STC_filtered             = tf.where(tf.concat([tf.fill([tf.shape(AC_filtered)[0], 1], False), AC_filtered[:, 1:2] < self.min_action, tf.fill([tf.shape(AC_filtered)[0], 1], False)], axis=1), \
+                                                    tf.multiply(AC_filtered, tf.fill(tf.shape(AC_filtered), 0.0)), AC_filtered, name='STC_filtered')
+                filtered_chiller_actions = tf.where(tf.concat([tf.fill([tf.shape(STC_filtered)[0], 2], False), STC_filtered[:, 2:] < self.min_action], axis=1), \
+                                                    tf.multiply(STC_filtered, tf.fill(tf.shape(STC_filtered), 0.0)), STC_filtered, name='filtered_chiller_actions')
+
+                # remove heating + cooling actions, element-wise multiplication
+                out                      = tf.where(tf.concat([filtered_chiller_actions[:, :1] < 0, filtered_chiller_actions[:, :1] < 0, filtered_chiller_actions[:, :1] < 0], axis=1), \
+                                                    tf.multiply(filtered_chiller_actions, tf.concat([tf.fill([tf.shape(filtered_chiller_actions)[0], 1], 1.0), tf.fill([tf.shape(filtered_chiller_actions)[0], 2], 0.0)], axis=1)), filtered_chiller_actions, name='out')
+
+            elif self.config['SIMULATOR_VERSION'] == "Inha_NewBuilding_v0":
+                # fully connected layers
+                fc_1           = tf.compat.v1.layers.dense(states, 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1', trainable=trainable)
+                fc_2           = tf.compat.v1.layers.dense(fc_1, 16, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2', trainable=trainable)
+
+                # Q_mc
+                fc_3_1         = tf.compat.v1.layers.dense(fc_2, 8, activation=tf.nn.tanh, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3_1', trainable=trainable)
+                Q_mc           = tf.clip_by_value(tf.compat.v1.layers.dense(fc_3_1, 1, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), -1, 1, name='Q_mc')
+
+                # damper_action cannot be negative, hence relu activation
+                fc_3_2         = tf.compat.v1.layers.dense(fc_2, 8, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3_2', trainable=trainable)
+                dor            = tf.clip_by_value(tf.compat.v1.layers.dense(fc_3_2, 1, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), self.action_lower_bound[1], self.action_upper_bound[1], name='damper_action')
+
+                # concatenate to output
+                out            = tf.concat([Q_mc, dor], axis=1, name='out')
+
             return out
-
-            '''
-            # weights and biases
-            w1 = tf.compat.v1.get_variable('a_w1', (self.state_size, 32), trainable=trainable)
-            b1 = tf.compat.v1.get_variable('a_b1', (1, 32), trainable=trainable)
-
-            w2 = tf.compat.v1.get_variable('a_w2', (32, 16), trainable=trainable)
-            b2 = tf.compat.v1.get_variable('a_b2', (1, 16), trainable=trainable)
-
-            w3_1 = tf.compat.v1.get_variable('a_w3_1', (16, 1), trainable=trainable)
-            b3_1 = tf.compat.v1.get_variable('a_b3_1', (1, 1), trainable=trainable)
-            w3_2 = tf.compat.v1.get_variable('a_w3_2', (16, 1), trainable=trainable)
-            b3_2 = tf.compat.v1.get_variable('a_b3_2', (1, 1), trainable=trainable)
-            
-            # fully connected layers
-            fc_1 = tf.nn.relu(tf.matmul(states, w1) + b1)
-            fc_2 = tf.nn.relu(tf.matmul(fc_1, w2) + b2)
-
-            e_prod_action = tf.nn.tanh(tf.matmul(fc_2, w3_1) + b3_1)
-            damper_action = tf.nn.relu(tf.matmul(fc_2, w3_2) + b3_2)
-
-            # concatenate to output
-            out = tf.concat([e_prod_action, damper_action], axis=1, name='out')
-            
-            return out
-            '''
 
     def build_critic(self, states, actions, scope, trainable=True):
         with tf.compat.v1.variable_scope(scope):
@@ -148,33 +142,11 @@ class DDPG(object):
             fc_1_2 = tf.compat.v1.layers.dense(actions, 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1_2', trainable=trainable)
             fc_1   = tf.concat([fc_1_1, fc_1_2], axis=1, name='fc_1')
 
-            fc_2 = tf.compat.v1.layers.dense(fc_1, 16, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2', trainable=trainable)
+            fc_2   = tf.compat.v1.layers.dense(fc_1, 16, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2', trainable=trainable)
 
-            out = tf.compat.v1.layers.dense(fc_2, 1, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='out', trainable=trainable)
+            out    = tf.compat.v1.layers.dense(fc_2, 1, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='out', trainable=trainable)
             
             return out
-
-            '''
-            # weights and biases
-            w1_s = tf.compat.v1.get_variable('c_w1_s', (self.state_size, 32), trainable=trainable)
-            w1_a = tf.compat.v1.get_variable('c_w1_a', (self.action_size, 32), trainable=trainable)
-            b1   = tf.compat.v1.get_variable('c_b1', (1, 32), trainable=trainable)
-
-            w2 = tf.compat.v1.get_variable('c_w2', (32, 16), trainable=trainable)
-            b2 = tf.compat.v1.get_variable('c_b2', (1, 16), trainable=trainable)
-
-            w3 = tf.compat.v1.get_variable('c_w3', (16, 1), trainable=trainable)
-            b3 = tf.compat.v1.get_variable('c_b3', (1, 1), trainable=trainable)
-            
-            # fully connected layers
-            fc_1 = tf.nn.relu(tf.matmul(states, w1_s) + tf.matmul(actions, w1_a) + b1)
-            fc_2 = tf.nn.relu(tf.matmul(fc_1, w2) + b2)
-
-            # output layer
-            out = tf.matmul(fc_2, w3) + b3
-            
-            return out
-            '''
 
     def act(self, state):
         if self.MODE == 'test':
@@ -184,22 +156,30 @@ class DDPG(object):
         elif self.MODE == 'train':
             # if the ddpg network did not begin the training phase, return random actions
             if self.config['COUNTER'] < self.config['MEMORY_CAPACITY']:
-                random_action = np.array([random.uniform(self.action_lower_bound[0], self.action_upper_bound[0]), \
-                                          random.uniform(self.action_lower_bound[1], self.action_upper_bound[1]), \
-                                          random.uniform(self.action_lower_bound[2], self.action_upper_bound[2])])
-
+                if self.config['SIMULATOR_VERSION'] == "ShinSaeGae_v0":
+                    random_action = np.array([random.uniform(self.action_lower_bound[0], self.action_upper_bound[0]), \
+                                              random.uniform(self.action_lower_bound[1], self.action_upper_bound[1]), \
+                                              random.uniform(self.action_lower_bound[2], self.action_upper_bound[2])])
+                elif self.config['SIMULATOR_VERSION'] == "Inha_NewBuilding_v0":
+                    random_action = np.array([random.uniform(-1, 1), \
+                                              random.uniform(self.action_lower_bound[1], self.action_upper_bound[1])])
+                
                 return random_action
 
             # if the exploration rate is below or equal to the random sample from a uniform distribution over [0, 1), return a noisy action
             elif np.random.rand() <= self.config['EPSILON']:
                 # add randomness to action using normal distribution, exploration
-                noisy_action = np.array([np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 0], self.config['E_PROD_STAND_DEV']), self.action_lower_bound[0], self.action_upper_bound[0]), \
-                                         np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 1], self.config['E_PROD_STAND_DEV']), self.action_lower_bound[1], self.action_upper_bound[2]), \
-                                         np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 2], self.config['E_PROD_STAND_DEV']), self.action_lower_bound[1], self.action_upper_bound[2])])
+                if self.config['SIMULATOR_VERSION'] == "ShinSaeGae_v0":
+                    noisy_action = np.array([np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 0], self.config['CHILLER_STAND_DEV']), self.action_lower_bound[0], self.action_upper_bound[0]), \
+                                             np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 1], self.config['CHILLER_STAND_DEV']), self.action_lower_bound[1], self.action_upper_bound[1]), \
+                                             np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 2], self.config['CHILLER_STAND_DEV']), self.action_lower_bound[2], self.action_upper_bound[2])])
+                elif self.config['SIMULATOR_VERSION'] == "Inha_NewBuilding_v0":
+                    noisy_action = np.array([np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 0], self.config['CHILLER_STAND_DEV']), -1, 1), \
+                                             np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 1], self.config['DAMP_STAND_DEV']), self.action_lower_bound[1], self.action_upper_bound[1])])
 
                 # decrease the epsilon and the standard deviation value
                 self.config['EPSILON']          *= self.config['EPSILON_DECAY']
-                self.config['E_PROD_STAND_DEV'] *= self.config['EPSILON_DECAY']
+                self.config['CHILLER_STAND_DEV'] *= self.config['EPSILON_DECAY']
                 self.config['DAMP_STAND_DEV']   *= self.config['EPSILON_DECAY']
 
                 return noisy_action
