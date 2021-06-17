@@ -1,7 +1,12 @@
-# sean sungil kim
+"""BOLTZMANN RL
+
+.. moduleauthor:: Sean Sungil Kim <sungilkim3314@gmail.com>
+
+Deals with everything related to the rl agent.
+
+"""
 
 import tensorflow as tf
-import keras
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import deque
@@ -12,7 +17,18 @@ warnings.filterwarnings("ignore")
 
 
 class DDPG(object):
-    def __init__(self,config, MODE, state_size, action_size, action_lower_bound, action_upper_bound):
+    def __init__(self, config, MODE, state_size, action_size, action_lower_bound, action_upper_bound):
+        """Initializes all the tensorflow placeholders, empty lists necessary for saving the result, rl parameters, simulator parameters, and the rl algorithm tensorflow graphs.
+
+        Args:
+            config (dict): configuration file in JSON format.
+            MODE (str): train vs. test phase.
+            state_size (int): total number of observational states.
+            action_size (int): total number of actions.
+            action_lower_bound (list): lowest possible value for each action.
+            action_upper_bound (list): highest possible value for each action.
+
+        """
         self.actor_loss_lst        = []
         self.critic_loss_lst       = []
         self.actor_loss_threshold  = None
@@ -26,9 +42,10 @@ class DDPG(object):
         self.state_size            = state_size
         self.action_size           = action_size
         self.nChillers             = self.config["nChillers"] # nAC, nSTC, nLTC
-        self.action_lower_bound    = action_lower_bound
-        self.action_upper_bound    = action_upper_bound
-        self.min_action            = 0.1
+        #self.action_lower_bound    = action_lower_bound
+        #self.action_upper_bound    = action_upper_bound
+        self.action_lower_bound    = [-1.0]
+        self.action_upper_bound    = [1.0]
 
         # placeholders for inputs
         self.states                = tf.compat.v1.placeholder(tf.float32, [None, state_size], 'States')
@@ -85,37 +102,43 @@ class DDPG(object):
             self.soft_update()
 
     def build_actor(self, states, scope, trainable=True):
+        """Defines the nn actor model in tensorflow.
+
+        Args:
+            states (arr): the state parameters defined in the Simulator class.
+            scope (str): the variable scope name.
+            
+        Kwargs:
+            trainable (bool): The primary networks should be trainable, but the target networks should not be trainable. The target networks' weights are updated via self.soft_update().
+
+        Returns:
+            The built/defined actor model.
+
+        """
         with tf.compat.v1.variable_scope(scope):
-            if self.config['SIMULATOR_VERSION'] == "ShinSaeGae_v0":
+            if self.config['SIMULATOR_VERSION'] == "ShinSaeGae_v0" and (self.config['SEASON'] == 'all' or self.config['SEASON'] == 'summer-winter'):
                 # fully connected layers
-                # temperature related states
-                fc_1_1                   = tf.compat.v1.layers.dense(states[:, :4], 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1_1', trainable=trainable)
-                fc_2_1                   = tf.compat.v1.layers.dense(fc_1_1, 16, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2_1', trainable=trainable)
+                fc_1 = tf.compat.v1.layers.dense(states, 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1', trainable=trainable)
+                fc_2 = tf.compat.v1.layers.dense(fc_1, 16, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2', trainable=trainable)
+                bn = tf.compat.v1.layers.batch_normalization(fc_2, name='bn', trainable=trainable)
 
-                # time and cost related states
-                fc_1_2                   = tf.compat.v1.layers.dense(states[:, 4:], 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1_2', trainable=trainable)
-                fc_2_2                   = tf.compat.v1.layers.dense(fc_1_2, 16, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2_2', trainable=trainable)
+                fc_3 = tf.compat.v1.layers.dense(bn, 8, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3', trainable=trainable)
+                out = tf.compat.v1.layers.dense(fc_3, 1, activation=tf.nn.tanh, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='out', trainable=trainable)
 
-                fc_3_concat              = tf.concat([fc_2_1, fc_2_2], axis=1, name='fc_3_concat')
-                fc_3                     = tf.compat.v1.layers.dense(fc_3_concat, 16, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_3', trainable=trainable)
-
-                # define lower and upper bounds
                 # tf.clip_by_value(t, clip_value_min, clip_value_max)
-                raw_chiller_actions      = tf.clip_by_value(tf.compat.v1.layers.dense(fc_3, 3, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), \
-                                                       tf.constant([[-self.nChillers[0], 0.0, 0.0]], tf.float32), tf.constant([[self.nChillers[0], self.nChillers[1], self.nChillers[2]]], tf.float32), name='raw_chiller_actions')
+                #clipped  = tf.clip_by_value(tf.compat.v1.layers.dense(fc_4, 1, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), \
+                #                            tf.constant([[self.action_lower_bound[0]]], tf.float32), tf.constant([[self.action_upper_bound[0]]], tf.float32), name='clipped')
 
-                # remove very small actions
                 # tf.where(condition, x_true, y_false)
-                AC_filtered              = tf.where(tf.concat([tf.abs(raw_chiller_actions[:, :1]) < self.min_action, tf.fill([tf.shape(raw_chiller_actions)[0], 2], False)], axis=1), \
-                                                    tf.multiply(raw_chiller_actions, tf.fill(tf.shape(raw_chiller_actions), 0.0)), raw_chiller_actions, name='AC_filtered')
-                STC_filtered             = tf.where(tf.concat([tf.fill([tf.shape(AC_filtered)[0], 1], False), AC_filtered[:, 1:2] < self.min_action, tf.fill([tf.shape(AC_filtered)[0], 1], False)], axis=1), \
-                                                    tf.multiply(AC_filtered, tf.fill(tf.shape(AC_filtered), 0.0)), AC_filtered, name='STC_filtered')
-                filtered_chiller_actions = tf.where(tf.concat([tf.fill([tf.shape(STC_filtered)[0], 2], False), STC_filtered[:, 2:] < self.min_action], axis=1), \
-                                                    tf.multiply(STC_filtered, tf.fill(tf.shape(STC_filtered), 0.0)), STC_filtered, name='filtered_chiller_actions')
+                #out = tf.where(tf.math.abs(clipped[0, 0]) < 100, tf.multiply(clipped, tf.fill([1, 1], 0.0)), clipped, name='out')
 
-                # remove heating + cooling actions, element-wise multiplication
-                out                      = tf.where(tf.concat([filtered_chiller_actions[:, :1] < 0, filtered_chiller_actions[:, :1] < 0, filtered_chiller_actions[:, :1] < 0], axis=1), \
-                                                    tf.multiply(filtered_chiller_actions, tf.concat([tf.fill([tf.shape(filtered_chiller_actions)[0], 1], 1.0), tf.fill([tf.shape(filtered_chiller_actions)[0], 2], 0.0)], axis=1)), filtered_chiller_actions, name='out')
+            elif self.config['SIMULATOR_VERSION'] == "ShinSaeGae_v0" and self.config['SEASON'] == 'summer':
+                # fully connected layers
+                fc_1 = tf.compat.v1.layers.dense(states, 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1', trainable=trainable)
+                fc_2 = tf.compat.v1.layers.dense(fc_1, 16, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2', trainable=trainable)
+                
+                out  = tf.clip_by_value(tf.compat.v1.layers.dense(fc_2, 1, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), trainable=trainable), \
+                                        tf.constant([[0]], tf.float32), tf.constant([[self.action_upper_bound[0]]], tf.float32), name='out')
 
             elif self.config['SIMULATOR_VERSION'] == "Inha_NewBuilding_v0":
                 # fully connected layers
@@ -136,10 +159,24 @@ class DDPG(object):
             return out
 
     def build_critic(self, states, actions, scope, trainable=True):
+        """Defines the nn critic model in tensorflow
+
+        Args:
+            states (arr): the state parameters defined in the Simulator class.
+            actions (arr): the actions from the actor.
+            scope (str): the variable scope name.
+            
+        Kwargs:
+            trainable (bool): The primary networks should be trainable, but the target networks should not be trainable. The target networks' weights are updated via self.soft_update().
+
+        Returns:
+            The built/defined critic model.
+
+        """
         with tf.compat.v1.variable_scope(scope):
             # fully connected layers
             fc_1_1 = tf.compat.v1.layers.dense(states, 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1_1', trainable=trainable)
-            fc_1_2 = tf.compat.v1.layers.dense(actions, 32, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1_2', trainable=trainable)
+            fc_1_2 = tf.compat.v1.layers.dense(actions, 16, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_1_2', trainable=trainable)
             fc_1   = tf.concat([fc_1_1, fc_1_2], axis=1, name='fc_1')
 
             fc_2   = tf.compat.v1.layers.dense(fc_1, 16, activation=tf.nn.relu, kernel_regularizer=tf.keras.regularizers.l2(l=0.01), name='fc_2', trainable=trainable)
@@ -149,6 +186,17 @@ class DDPG(object):
             return out
 
     def act(self, state):
+        """When the current state is inputted to this function, the current state is fed into the rl agent andthe action is outputted.
+
+        This function takes into consideration the concept of exploration and exploitation.
+
+        Args:
+            state (arr): the state parameter defined in the Simulator class.
+            
+        Returns:
+            Either a randomly sampled (exploration) or actor-based (exploitation) actions.
+
+        """
         if self.MODE == 'test':
             # return the action with the highest rewards, exploitation
             return self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0]
@@ -157,9 +205,7 @@ class DDPG(object):
             # if the ddpg network did not begin the training phase, return random actions
             if self.config['COUNTER'] < self.config['MEMORY_CAPACITY']:
                 if self.config['SIMULATOR_VERSION'] == "ShinSaeGae_v0":
-                    random_action = np.array([random.uniform(self.action_lower_bound[0], self.action_upper_bound[0]), \
-                                              random.uniform(self.action_lower_bound[1], self.action_upper_bound[1]), \
-                                              random.uniform(self.action_lower_bound[2], self.action_upper_bound[2])])
+                    random_action = np.array([random.uniform(self.action_lower_bound[0], self.action_upper_bound[0])])
                 elif self.config['SIMULATOR_VERSION'] == "Inha_NewBuilding_v0":
                     random_action = np.array([random.uniform(-1, 1), \
                                               random.uniform(self.action_lower_bound[1], self.action_upper_bound[1])])
@@ -170,17 +216,16 @@ class DDPG(object):
             elif np.random.rand() <= self.config['EPSILON']:
                 # add randomness to action using normal distribution, exploration
                 if self.config['SIMULATOR_VERSION'] == "ShinSaeGae_v0":
-                    noisy_action = np.array([np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 0], self.config['CHILLER_STAND_DEV']), self.action_lower_bound[0], self.action_upper_bound[0]), \
-                                             np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 1], self.config['CHILLER_STAND_DEV']), self.action_lower_bound[1], self.action_upper_bound[1]), \
-                                             np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 2], self.config['CHILLER_STAND_DEV']), self.action_lower_bound[2], self.action_upper_bound[2])])
+                    noisy_action = np.array([np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 0], self.config['STAND_DEV']), self.action_lower_bound[0], self.action_upper_bound[0])])
                 elif self.config['SIMULATOR_VERSION'] == "Inha_NewBuilding_v0":
-                    noisy_action = np.array([np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 0], self.config['CHILLER_STAND_DEV']), -1, 1), \
-                                             np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 1], self.config['DAMP_STAND_DEV']), self.action_lower_bound[1], self.action_upper_bound[1])])
+                    noisy_action = np.array([np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 0], self.config['STAND_DEV']), -1, 1), \
+                                             np.clip(np.random.normal(self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0, 1], self.config['STAND_DEV']), self.action_lower_bound[1], self.action_upper_bound[1])])
 
                 # decrease the epsilon and the standard deviation value
-                self.config['EPSILON']          *= self.config['EPSILON_DECAY']
-                self.config['CHILLER_STAND_DEV'] *= self.config['EPSILON_DECAY']
-                self.config['DAMP_STAND_DEV']   *= self.config['EPSILON_DECAY']
+                if self.config['EPSILON'] > self.config['MIN_EPSILON']:
+                    self.config['EPSILON'] *= self.config['EPSILON_DECAY']
+                if self.config['STAND_DEV'] > self.config['MIN_STAND_DEV']:
+                    self.config['STAND_DEV'] *= self.config['EPSILON_DECAY']
 
                 return noisy_action
 
@@ -189,13 +234,28 @@ class DDPG(object):
                 return self.sess.run(self.actions, {self.states: state[np.newaxis, :]})[0]
 
     def remember(self, state, action, reward, next_state):
+        """Adds the (state, action, reward, next_state) pairs to the memory buffer.
+
+        Args:
+            state (arr): the state parameter defined in the simulator class.
+            action (list): the actions defined in the Simulator class.
+            reward (list): the reward calculated based on the states, from the simulator.
+            next_state (arr): the next timestep state parameters.
+
+        """
         # store in the replay experience queue
-        self.memory.append(np.concatenate((state, action, [reward], next_state)))
+        self.memory.append(np.concatenate((state, action, reward, next_state)))
 
         # add 1 to the counter
         self.config['COUNTER'] += 1
 
     def train(self):
+        """Performs the tranining of the actor and the critic according to the graphs initialized in the__init__() function above. 
+
+        Currently utilizes random sampling from the memory buffer, andsoft update procedure.
+        Saves the actor and critic separately according to the corresponding losses.
+        
+        """
         if self.iteration == 0:
             print('\t\t\t\t\t\t\t\t----------- DDPG TRAINING HAS STARTED -----------\t\t\t\t\t\t\t\t')
 
@@ -225,14 +285,23 @@ class DDPG(object):
         self.critic_loss_lst.append(current_critic_loss)
 
         # soft update
-        self.soft_update()
+        if self.iteration%100 == 0:
+            self.soft_update()
 
-        if len(self.actor_loss_lst) == 10000:
+        if self.iteration%3000 == 0:
+            print('\t\t\t\t\t\t\t\t----------- ACTOR-CRITIC SAVED -----------\t\t\t\t\t\t\t\t')
+            self.save_actor()
+            self.save_critic()
+            #self.actor_loss_threshold  = current_actor_loss
+            #self.critic_loss_threshold = current_critic_loss
+
+        '''
+        if len(self.actor_loss_lst) == 5000:
             print('\t\t\t\t\t\t\t\t----------- DDPG MIN THRESHOLD SET -----------\t\t\t\t\t\t\t\t')
             self.actor_loss_threshold  = current_actor_loss
             self.critic_loss_threshold = current_critic_loss
             
-        elif len(self.actor_loss_lst) > 10000:
+        elif len(self.actor_loss_lst) > 5000:
             if current_actor_loss <= self.actor_loss_threshold:
                 self.save_actor()
                 self.actor_loss_threshold = current_actor_loss
@@ -242,12 +311,15 @@ class DDPG(object):
                 self.save_critic()
                 self.critic_loss_threshold = current_critic_loss
                 print('\t\t\t\t\t\t\t\t----------- CRITIC MODEL SAVED -----------\t\t\t\t\t\t\t\t')
-
+        '''
         self.iteration +=1
 
-        return self.actor_loss_threshold, self.critic_loss_threshold
+        #return self.actor_loss_threshold, self.critic_loss_threshold
 
     def save_actor_critic_result(self):
+        """Saves the loss vs iterations graph for both the actor and the critic.
+        
+        """
         plt.figure(figsize=(16, 4))
         plt.plot(self.actor_loss_lst, linewidth=0.3)
         plt.xlabel('$Steps$'), plt.ylabel('$Loss$')
@@ -261,18 +333,30 @@ class DDPG(object):
         plt.savefig('./RESULTS/'+self.MODE.upper()+'/critic_loss.png')
 
     def soft_update(self):
+        """Performs the soft update procedure defined in the __init__() function above.
+        
+        """
         # run the soft-update process
         self.sess.run(self.soft_update_variables)
 
     def save_actor(self):
+        """Saves the actor-related graphs.
+        
+        """
         # save actor weights
         self.actor_saver.save(self.sess, './GRAPHS/actor')
 
     def save_critic(self):
+        """Saves the critic-related graphs.
+        
+        """
         # save critic weights
         self.critic_saver.save(self.sess, './GRAPHS/critic')
 
     def load(self):
+        """Loads all the actor-critic related graphs.
+        
+        """
         if self.config['LOAD_CHECK']:
             stdoutOrigin=sys.stdout
             sys.stdout = open("./actor_init.txt", "w")
@@ -296,4 +380,3 @@ class DDPG(object):
                 print(str(acttor_param) +'\n'+ str(acttor_param.eval(session=self.sess)), '\n\n')
             sys.stdout.close()
             sys.stdout=stdoutOrigin
-            
